@@ -97,7 +97,9 @@ class TestMars(unittest.TestCase):
                     # compare with next in queue
                     if not test_w.task_queue:
                         self.fail("No tasks in queue. step %d, line %d" % (nth, n))
-                    if test_w.task_queue[0] != next_queued:
+                    sim = simulation.point_to_index(test_w.task_queue[0])
+                    print(f"nth: {nth}, next_queued: {next_queued}, sim: {sim}={test_w.task_queue[0]}")
+                    if sim != next_queued:
                         self.fail("Task address does not match (%d != %d). step %d, line %d" %
                                   (next_queued, test_w.task_queue[0], nth, n))
 

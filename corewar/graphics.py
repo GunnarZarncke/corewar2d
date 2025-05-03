@@ -1,12 +1,14 @@
 #! /usr/bin/env python3
 # coding: utf-8
 
+import os
+import sys
 import pygame
 from pygame.locals import *
 
 from core import DEFAULT_INITIAL_INSTRUCTION
 from mars import MARS, EVENT_EXECUTED, EVENT_I_WRITE, EVENT_I_READ, EVENT_A_DEC, EVENT_A_INC, EVENT_B_DEC, EVENT_B_INC, EVENT_A_READ, EVENT_A_WRITE, EVENT_B_READ, EVENT_B_WRITE, EVENT_A_ARITH, EVENT_B_ARITH
-from redcode import *
+from redcode import Point2D,parse, Warrior, DAT, MOV, ADD, SUB, MUL, DIV, MOD, JMP, JMZ, JMN, DJN, SPL, SLT, CMP, SEQ, SNE, NOP
 
 INSTRUCTIONS_PER_LINE = 100
 INSTRUCTION_SIZE_X = 9
@@ -125,7 +127,7 @@ class PygameMARS(MARS):
         address %= len(self)
         position = ((address % INSTRUCTIONS_PER_LINE) * INSTRUCTION_SIZE_X,
                     (address / INSTRUCTIONS_PER_LINE) * INSTRUCTION_SIZE_Y)
-        instruction = self.core[address]
+        instruction = self.core[Point2D(address, 0)]
 
         if event_type in (EVENT_I_WRITE, EVENT_A_WRITE, EVENT_B_WRITE):
             # In case of a write event, we write the foreground with the
@@ -165,7 +167,6 @@ class PygameMARS(MARS):
 
 if __name__ == "__main__":
     import argparse
-    import sys
 
     parser = argparse.ArgumentParser(description='MARS (Memory Array Redcode Simulator)')
     parser.add_argument('--rounds', '-r', metavar='ROUNDS', type=int, nargs='?',
@@ -271,7 +272,7 @@ if __name__ == "__main__":
             display_surface.fill(BLACK, ((simulation.size[0], 0),
                                          (ZOOM_VIEW_WIDTH, simulation.size[1])))
             for n, address in enumerate(range(c_address-18, c_address+18)):
-                instruction = simulation[address]
+                instruction = simulation[Point2D(address,0)]
                 i_surface = core_font.render("%04d %s" % (address,
                                                           instruction),
                                                True,
