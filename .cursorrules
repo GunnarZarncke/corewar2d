@@ -1,0 +1,12 @@
+# Cursor Rules for Core War Project
+
+# Coding
+- Use many small files
+
+# Testing
+- Write tests for new features
+
+# Error handling
+- Validate all input
+- Handle errors gracefully
+- do not use nil values to represent invalid data. reject invalid data with a clear error message

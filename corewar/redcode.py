@@ -103,6 +103,84 @@ DEFAULT_MODIFIERS = dict((tuple(OPCODES[opcode] for opcode in opcodes),
                                MODIFIERS[modifier]) for ab_modes, modifier in ab_modes_modifiers.items()))
                          for opcodes, ab_modes_modifiers in DEFAULT_MODIFIERS.items())
 
+class Point2D:
+    def __init__(self, x, y=0):
+        if isinstance(x, Point2D):
+            self.x = x.x
+            self.y = x.y
+        else:
+            self.x = int(x)
+            self.y = int(y)
+
+    def __str__(self):
+        if self.y == 0:
+            return str(self.x)
+        return f"{self.x};{self.y}"
+
+    def __eq__(self, other):
+        if isinstance(other, Point2D):
+            return self.x == other.x and self.y == other.y
+        return self.x == other and self.y == 0
+
+    def __gt__(self, other):
+        if isinstance(other, Point2D):
+            return self.x > other.x
+        return self.x > other
+
+    def __lt__(self, other):
+        if isinstance(other, Point2D):
+            return self.x < other.x
+        return self.x < other
+
+    def __add__(self, other):
+        if isinstance(other, Point2D):
+            return Point2D(self.x + other.x, self.y + other.y)
+        return Point2D(self.x + other, self.y)
+
+    def __radd__(self, other):
+        return Point2D(other + self.x, self.y)
+
+    def __sub__(self, other):
+        if isinstance(other, Point2D):
+            return Point2D(self.x - other.x, self.y - other.y)
+        return Point2D(self.x - other, self.y)
+
+    def __rsub__(self, other):
+        return Point2D(other - self.x, -self.y)
+
+    def __mul__(self, other):
+        if isinstance(other, Point2D):
+            return Point2D(self.x * other.x, self.y * other.y)
+        return Point2D(self.x * other, self.y)
+
+    def __rmul__(self, other):
+        return Point2D(other * self.x, self.y)
+
+    def __truediv__(self, other):
+        if isinstance(other, Point2D):
+            return Point2D(self.x // other.x, self.y)
+        return Point2D(self.x // other, self.y)
+
+    def __rtruediv__(self, other):
+        return Point2D(other // self.x, 0)
+
+    def __mod__(self, other):
+        if isinstance(other, Point2D):
+            return Point2D(self.x % other.x, self.y)
+        return Point2D(self.x % other, self.y)
+
+    def __rmod__(self, other):
+        return Point2D(other % self.x, 0)
+
+    def __int__(self):
+        return self.x
+
+    def __index__(self):
+        return int(self.x)
+
+    def __hash__(self):
+        return hash((self.x, self.y))
+
 class Warrior(object):
     "An encapsulation of a Redcode Warrior, with instructions and meta-data"
 
@@ -131,6 +209,7 @@ class Instruction(object):
     def __init__(self, opcode, modifier=None, a_mode=None, a_number=0,
                  b_mode=None, b_number=0):
         self.opcode = OPCODES[opcode.upper()] if isinstance(opcode, str) else opcode
+        self.modifier = MODIFIERS[modifier.upper()] if isinstance(modifier, str) else modifier
         if a_mode is not None:
             self.a_mode = MODES[a_mode] if isinstance(a_mode, str) else a_mode
         else:
@@ -139,13 +218,13 @@ class Instruction(object):
             self.b_mode = MODES[b_mode] if isinstance(b_mode, str) else b_mode
         else:
             self.b_mode = IMMEDIATE if self.opcode == DAT and a_number != None else DIRECT
-        self._a_number = a_number if a_number else 0
-        self._b_number = b_number if b_number else 0
 
-        # this should be last, to decide on the default modifier
-        if modifier is not None:
-            self.modifier = MODIFIERS[modifier.upper()] if isinstance(modifier, str) else modifier
-        else:
+        # Store symbolic values as strings
+        self._a_number = a_number
+        self._b_number = b_number
+
+        # Set default modifier if none provided
+        if self.modifier is None:
             self.modifier = self.default_modifier()
 
         self.core = None
@@ -170,19 +249,45 @@ class Instruction(object):
 
     @property
     def a_number(self):
-        return self._a_number
+        if isinstance(self._a_number, str):
+            return self._a_number
+        if isinstance(self._a_number, Point2D):
+            return self._a_number
+        if isinstance(self._a_number, str) and ';' in self._a_number:
+            x, y = map(int, self._a_number.split(';'))
+            return Point2D(x, y)
+        return Point2D(int(self._a_number) if self._a_number else 0)
+
+    @a_number.setter
+    def a_number(self, value):
+        if isinstance(value, Point2D):
+            self._a_number = value
+        elif isinstance(value, str) and ';' in value:
+            x, y = map(int, value.split(';'))
+            self._a_number = Point2D(x, y)
+        else:
+            self._a_number = Point2D(int(value) if value else 0)
 
     @property
     def b_number(self):
-        return self._b_number
-
-    @a_number.setter
-    def a_number(self, number):
-        self._a_number = self.core.trim_signed(number) if self.core else number
+        if isinstance(self._b_number, str):
+            return self._b_number
+        if isinstance(self._b_number, Point2D):
+            return self._b_number
+        if isinstance(self._b_number, str) and ';' in self._b_number:
+            x, y = map(int, self._b_number.split(';'))
+            return Point2D(x, y)
+        return Point2D(int(self._b_number) if self._b_number else 0)
 
     @b_number.setter
-    def b_number(self, number):
-        self._b_number = self.core.trim_signed(number) if self.core else number
+    def b_number(self, value):
+        if isinstance(value, Point2D):
+            self._b_number = value
+        elif isinstance(value, str) and ';' in value:
+            x, y = map(int, value.split(';'))
+            self._b_number = Point2D(x, y)
+        else:
+            self._b_number = Point2D(int(value) if value else 0)
 
     def __eq__(self, other):
         return (self.opcode == other.opcode and self.modifier == other.modifier and
@@ -202,9 +307,9 @@ class Instruction(object):
         return "%s.%s %s %s, %s %s" % (opcode_str,
                                        modifier_str.ljust(2),
                                        a_mode_str,
-                                       str(self.a_number).rjust(5),
+                                       str(self.a_number),
                                        b_mode_str,
-                                       str(self.b_number).rjust(5))
+                                       str(self.b_number))
 
     def __repr__(self):
         return "<Instruction %s>" % self
