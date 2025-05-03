@@ -1,3 +1,4 @@
+#! /usr/bin/env python3
 # coding: utf-8
 
 from copy import copy
@@ -22,7 +23,7 @@ class Core(object):
     def clear(self, instruction=DEFAULT_INITIAL_INSTRUCTION):
         """Writes the same instruction thorough the entire core.
         """
-        self.instructions = [instruction.core_binded(self) for i in xrange(self.size)]
+        self.instructions = [instruction.core_binded(self) for i in range(self.size)]
 
     def trim_write(self, address):
         "Return the trimmed address to write, considering the write limit."
@@ -43,21 +44,22 @@ class Core(object):
     def _trim(self, address, limit):
         "Trims an address in the core, given a limit."
         result = address % limit
-        if result > limit/2:
+        if result > limit//2:
             result += self.size - limit
         return result
 
-    def __getitem__(self, address):
-        return self.instructions[address % self.size]
-
-    def __getslice__(self, start, stop):
-        if start > stop:
-            return self.instructions[start:] + self.instructions[:stop]
+    def __getitem__(self, key):
+        if isinstance(key, slice):
+            start, stop = key.start, key.stop
+            if start > stop:
+                return self.instructions[start:] + self.instructions[:stop]
+            else:
+                return self.instructions[start:stop]
         else:
-            return self.instructions[start:stop]
+            return self.instructions[self.trim(key)]
 
     def __setitem__(self, address, instruction):
-        self.instructions[address % self.size] = instruction
+        self.instructions[self.trim(address)] = instruction
 
     def __iter__(self):
         return iter(self.instructions)

@@ -1,4 +1,4 @@
-#! /usr/bin/env python
+#! /usr/bin/env python3
 # coding: utf-8
 
 from copy import copy
@@ -56,7 +56,7 @@ class MARS(object):
         "Loads its warriors to the memory with starting task queues"
 
         # the space between warriors - equally spaced in the core
-        space = len(self.core) / len(self.warriors)
+        space = len(self.core) // len(self.warriors)
 
         for n, warrior in enumerate(self.warriors):
             # position is in the nth equally separated space plus a random
@@ -330,7 +330,7 @@ class MARS(object):
                 elif ir.opcode == MUL:
                     do_arithmetic(operator.mul)
                 elif ir.opcode == DIV:
-                    do_arithmetic(operator.div)
+                    do_arithmetic(operator.truediv)
                 elif ir.opcode == MOD:
                     do_arithmetic(operator.mod)
                 elif ir.opcode == JMP:
@@ -422,7 +422,7 @@ if __name__ == "__main__":
                         default=100, help='Max warrior length')
     parser.add_argument('--distance', '-d', metavar='MINDISTANCE', type=int, nargs='?',
                         default=100, help='Minimum warrior distance')
-    parser.add_argument('warriors', metavar='WARRIOR', type=file, nargs='+',
+    parser.add_argument('warriors', metavar='WARRIOR', type=str, nargs='+',
                         help='Warrior redcode filename')
 
     args = parser.parse_args()
@@ -436,14 +436,14 @@ if __name__ == "__main__":
                    'MINDISTANCE': args.distance}
 
     # assemble warriors
-    warriors = [redcode.parse(file, environment) for file in args.warriors]
+    warriors = [redcode.parse(open(file, 'r'), environment) for file in args.warriors]
 
     # initialize wins, losses and ties for each warrior
     for warrior in warriors:
         warrior.wins = warrior.ties = warrior.losses = 0
 
     # for each round
-    for i in xrange(args.rounds):
+    for i in range(args.rounds):
 
         # create new simulation
         simulation = MARS(warriors=warriors,
@@ -452,7 +452,7 @@ if __name__ == "__main__":
 
         active_warrior_to_stop = 1 if len(warriors) >= 2 else 0
 
-        for c in xrange(args.cycles):
+        for c in range(args.cycles):
             simulation.step()
 
             # if there's only one left, or are all dead, then stop simulation
@@ -472,13 +472,13 @@ if __name__ == "__main__":
                     warrior.losses += 1
 
     # print results
-    print "Results: (%d rounds)" % args.rounds
-    print "%s %s %s %s" % ("Warrior (Author)".ljust(40), "wins".rjust(5),
-                           "ties".rjust(5), "losses".rjust(5))
+    print("Results: (%d rounds)" % args.rounds)
+    print("%s %s %s %s" % ("Warrior (Author)".ljust(40), "wins".rjust(5),
+                           "ties".rjust(5), "losses".rjust(5)))
     for warrior in warriors:
-        print "%s %s %s %s" % (("%s (%s)" % (warrior.name, warrior.author)).ljust(40),
+        print("%s %s %s %s" % (("%s (%s)" % (warrior.name, warrior.author)).ljust(40),
                                str(warrior.wins).rjust(5),
                                str(warrior.ties).rjust(5),
-                               str(warrior.losses).rjust(5))
+                               str(warrior.losses).rjust(5)))
 
 

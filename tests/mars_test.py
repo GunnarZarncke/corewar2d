@@ -1,9 +1,14 @@
-#! /usr/bin/env python
-#! coding: utf-8
+#! /usr/bin/env python3
+# coding: utf-8
 
 import os
 import re
+import sys
 import unittest
+
+# Add both the project root and corewar directories to the Python path
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'corewar')))
 
 from corewar import redcode, mars
 
@@ -31,21 +36,21 @@ class TestMars(unittest.TestCase):
             nop
         """
 
-        dwarf        = redcode.parse(dwarf_code.split('\n'), DEFAULT_ENV)
+        dwarf = redcode.parse(dwarf_code.split('\n'), DEFAULT_ENV)
         sitting_duck = redcode.parse(sitting_duck_code.split('\n'), DEFAULT_ENV)
 
         simulation = mars.MARS(warriors=[dwarf, sitting_duck])
 
         # run simulation for at most
-        for x in xrange(8000):
+        for x in range(8000):
             simulation.step()
             if not dwarf.task_queue or not sitting_duck.task_queue:
                 break
         else:
             self.fail("Running for too long and both warriors still alive")
 
-        self.assertEquals(1, len(dwarf.task_queue))
-        self.assertEquals(0, len(sitting_duck.task_queue))
+        self.assertEqual(1, len(dwarf.task_queue))
+        self.assertEqual(0, len(sitting_duck.task_queue))
 
     def test_validate(self):
 
@@ -56,7 +61,7 @@ class TestMars(unittest.TestCase):
 
         simulation = mars.MARS(warriors=[validate], randomize=False)
 
-        for i in xrange(8000):
+        for i in range(8000):
             simulation.step()
             if not validate.task_queue:
                 self.fail("Interpreter is not ICWS88-compliant. died in %d steps" % i)
@@ -99,13 +104,13 @@ class TestMars(unittest.TestCase):
                     # compare it with the current state
                     for e, i in zip(expected, simulation.core[core_start:core_end]):
                         if e != i:
-                            print
+                            print()
                             x = core_start
                             for e, i in zip(expected, simulation.core[core_start:core_end]):
                                 if e != i:
-                                    print "%05d %s != %s" % (x, str(e), str(i))
+                                    print("%05d %s != %s" % (x, str(e), str(i)))
                                 else:
-                                    print "%05d %s == %s" % (x, str(e), str(i))
+                                    print("%05d %s == %s" % (x, str(e), str(i)))
                                 x += 1
                             self.fail("Core don't match, step %d, line %d" % (nth, n))
 

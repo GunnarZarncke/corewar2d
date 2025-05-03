@@ -1,3 +1,4 @@
+#! /usr/bin/env python3
 # coding: utf-8
 
 from copy import copy
@@ -99,8 +100,8 @@ DEFAULT_MODIFIERS = {
 DEFAULT_MODIFIERS = dict((tuple(OPCODES[opcode] for opcode in opcodes),
                          dict(((tuple(MODES[a] for a in ab_modes[0]),
                                 tuple(MODES[b] for b in ab_modes[1])),
-                               MODIFIERS[modifier]) for ab_modes, modifier in ab_modes_modifiers.iteritems()))
-                         for opcodes, ab_modes_modifiers in DEFAULT_MODIFIERS.iteritems())
+                               MODIFIERS[modifier]) for ab_modes, modifier in ab_modes_modifiers.items()))
+                         for opcodes, ab_modes_modifiers in DEFAULT_MODIFIERS.items())
 
 class Warrior(object):
     "An encapsulation of a Redcode Warrior, with instructions and meta-data"
@@ -122,7 +123,7 @@ class Warrior(object):
         return len(self.instructions)
 
     def __repr__(self):
-        return "<Warrior name=%s %d instructions>" % (self.name, len(self.instructions))
+        return "<Warrior %s by %s>" % (self.name, self.instructions)
 
 class Instruction(object):
     "An encapsulation of a Redcode instruction."
@@ -148,6 +149,8 @@ class Instruction(object):
             self.modifier = self.default_modifier()
 
         self.core = None
+        self.fg_color = None
+        self.bg_color = None
 
     def core_binded(self, core):
         """Return a copy of this instruction binded to a Core.
@@ -157,9 +160,9 @@ class Instruction(object):
         return instruction
 
     def default_modifier(self):
-        for opcodes, modes_modifiers in DEFAULT_MODIFIERS.iteritems():
+        for opcodes, modes_modifiers in DEFAULT_MODIFIERS.items():
             if self.opcode in opcodes:
-                for ab_modes, modifier in modes_modifiers.iteritems():
+                for ab_modes, modifier in modes_modifiers.items():
                     a_modes, b_modes = ab_modes
                     if self.a_mode in a_modes and self.b_mode in b_modes:
                         return modifier
@@ -191,20 +194,20 @@ class Instruction(object):
 
     def __str__(self):
         # inverse lookup the instruction values
-        opcode   = next(key for key,value in OPCODES.iteritems() if value==self.opcode)
-        modifier = next(key for key,value in MODIFIERS.iteritems() if value==self.modifier)
-        a_mode   = next(key for key,value in MODES.iteritems() if value==self.a_mode)
-        b_mode   = next(key for key,value in MODES.iteritems() if value==self.b_mode)
+        opcode_str = {v: k for k, v in OPCODES.items() if k.isupper() and isinstance(v, int)}.get(self.opcode, 'UNKNOWN')
+        modifier_str = {v: k for k, v in MODIFIERS.items()}.get(self.modifier, str(self.modifier))
+        a_mode_str = next(key for key,value in MODES.items() if value==self.a_mode)
+        b_mode_str = next(key for key,value in MODES.items() if value==self.b_mode)
 
-        return "%s.%s %s %s, %s %s" % (opcode,
-                                       modifier.ljust(2),
-                                       a_mode,
+        return "%s.%s %s %s, %s %s" % (opcode_str,
+                                       modifier_str.ljust(2),
+                                       a_mode_str,
                                        str(self.a_number).rjust(5),
-                                       b_mode,
+                                       b_mode_str,
                                        str(self.b_number).rjust(5))
 
     def __repr__(self):
-        return "<%s>" % self
+        return "<Instruction %s>" % self
 
 def parse(input, definitions={}):
     """ Parse a Redcode code from a line iterator (input) returning a Warrior
@@ -323,6 +326,13 @@ def parse(input, definitions={}):
                                  (n, line))
             else:
                 opcode, modifier, a_mode, a_number, b_mode, b_number = m.groups()
+                print("DEBUG: Parsed instruction components:")
+                print(f"  opcode: {opcode}")
+                print(f"  modifier: {modifier}")
+                print(f"  a_mode: {a_mode}")
+                print(f"  a_number: {a_number}")
+                print(f"  b_mode: {b_mode}")
+                print(f"  b_number: {b_number}")
 
                 if opcode.upper() not in OPCODES:
                     raise ValueError('Invalid opcode: %s in line %d: "%s"' %
@@ -353,7 +363,7 @@ def parse(input, definitions={}):
 
         # create a dictionary of relative labels addresses to be used as a local
         # eval environment
-        relative_labels = dict((name, address-n) for name, address in labels.iteritems())
+        relative_labels = dict((name, address-n) for name, address in labels.items())
 
         # evaluate instruction fields using global environment and labels
         if isinstance(instruction.a_number, str):
