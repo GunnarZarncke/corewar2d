@@ -124,10 +124,17 @@ class PygameMARS(MARS):
         surface.blit(self.recent_events, dest)
 
     def core_event(self, warrior, address, event_type):
-        address %= len(self)
-        position = ((address % INSTRUCTIONS_PER_LINE) * INSTRUCTION_SIZE_X,
-                    (address / INSTRUCTIONS_PER_LINE) * INSTRUCTION_SIZE_Y)
-        instruction = self.core[Point2D(address, 0)]
+        if not isinstance(address, Point2D):
+            raise ValueError("address must be a Point2D")
+            
+        # Ensure address is within bounds
+        address = self.core.trim(address)
+        
+        # Calculate position for drawing
+        position = ((address.x % INSTRUCTIONS_PER_LINE) * INSTRUCTION_SIZE_X,
+                    (address.y % (self.core.size // INSTRUCTIONS_PER_LINE)) * INSTRUCTION_SIZE_Y)
+        
+        instruction = self.core[address]
 
         if event_type in (EVENT_I_WRITE, EVENT_A_WRITE, EVENT_B_WRITE):
             # In case of a write event, we write the foreground with the

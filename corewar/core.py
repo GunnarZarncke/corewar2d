@@ -35,7 +35,7 @@ class Core(object):
         if not isinstance(point, Point2D):
             import traceback
             traceback.print_stack()
-            raise ValueError("Point2D expected")
+            raise ValueError("Point2D expected, got %s" % type(point))
             
         ## For 1D addressing (y=0), just wrap x around the core size
         #if point.y == 0:

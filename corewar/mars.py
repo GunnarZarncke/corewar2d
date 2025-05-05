@@ -55,7 +55,7 @@ class MARS(object):
         """Set instruction at Point2D coordinates."""
         self.core[point] = instruction
 
-    def core_event(self, warrior, address, event_type):
+    def core_event(self, warrior, address : Point2D, event_type):
         """Supposed to be implemented by subclasses to handle core
            events.
         """
@@ -132,7 +132,7 @@ class MARS(object):
                 # copy the current instruction to the instruction register
                 ir = copy(self.get_instruction(pc))
 
-                print(f"warrior: {warrior.name}, pc: {pc}, ir: {ir}")
+                #print(f"warrior: {warrior.name}, pc: {pc}, ir: {ir}")
 
                 # evaluate the A-operand
                 if ir.a_mode == IMMEDIATE:
@@ -153,10 +153,10 @@ class MARS(object):
                         # pre-decrement, if needed
                         if ir.a_mode == PREDEC_A:
                             self.get_instruction(Point2D(pc.x + wpa.x, pc.y + wpa.y)).a_number -= 1
-                            self.core_event(warrior, self.point_to_index(Point2D(pc.x + wpa.x, pc.y + wpa.y)), EVENT_A_DEC)
+                            self.core_event(warrior, Point2D(pc.x + wpa.x, pc.y + wpa.y), EVENT_A_DEC)
                         elif ir.a_mode == PREDEC_B:
                             self.get_instruction(Point2D(pc.x + wpa.x, pc.y + wpa.y)).b_number -= 1
-                            self.core_event(warrior, self.point_to_index(Point2D(pc.x + wpa.x, pc.y + wpa.y)), EVENT_B_DEC)
+                            self.core_event(warrior, Point2D(pc.x + wpa.x, pc.y + wpa.y), EVENT_B_DEC)
 
                         # calculate the indirect address, from A or B number
                         if ir.a_mode in (PREDEC_A, INDIRECT_A, POSTINC_A):
@@ -172,10 +172,10 @@ class MARS(object):
                 # post-increment, if needed
                 if ir.a_mode == POSTINC_A:
                     self.get_instruction(pip).a_number += 1
-                    self.core_event(warrior, self.point_to_index(pip), EVENT_A_INC)
+                    self.core_event(warrior, pip, EVENT_A_INC)
                 elif ir.a_mode == POSTINC_B:
                     self.get_instruction(pip).b_number += 1
-                    self.core_event(warrior, self.point_to_index(pip), EVENT_B_INC)
+                    self.core_event(warrior, pip, EVENT_B_INC)
 
                 # evaluate the B-operand - pretty much the same as A
                 if ir.b_mode == IMMEDIATE:
@@ -189,10 +189,10 @@ class MARS(object):
 
                         if ir.b_mode == PREDEC_A:
                             self.get_instruction(Point2D(pc.x + wpb.x, pc.y + wpb.y)).a_number -= 1
-                            self.core_event(warrior, self.point_to_index(Point2D(pc.x + wpb.x, pc.y + wpb.y)), EVENT_A_DEC)
+                            self.core_event(warrior, Point2D(pc.x + wpb.x, pc.y + wpb.y), EVENT_A_DEC)
                         elif ir.b_mode == PREDEC_B:
                             self.get_instruction(Point2D(pc.x + wpb.x, pc.y + wpb.y)).b_number -= 1
-                            self.core_event(warrior, self.point_to_index(Point2D(pc.x + wpb.x, pc.y + wpb.y)), EVENT_B_DEC)
+                            self.core_event(warrior, Point2D(pc.x + wpb.x, pc.y + wpb.y), EVENT_B_DEC)
 
                         if ir.b_mode in (PREDEC_A, INDIRECT_A, POSTINC_A):
                             rpb = Point2D(rpb.x + self.get_instruction(Point2D(pc.x + rpb.x, pc.y + rpb.y)).a_number, 0)
@@ -205,52 +205,58 @@ class MARS(object):
 
                 if ir.b_mode == POSTINC_A:
                     self.get_instruction(pip).a_number += 1
-                    self.core_event(warrior, self.point_to_index(pip), EVENT_A_INC)
+                    self.core_event(warrior, pip, EVENT_A_INC)
                 elif ir.b_mode == POSTINC_B:
                     self.get_instruction(pip).b_number += 1
-                    self.core_event(warrior, self.point_to_index(pip), EVENT_B_INC)
+                    self.core_event(warrior, pip, EVENT_B_INC)
 
                 # arithmetic common code
                 def do_arithmetic(op):
                     try:
+                        # Pre-calculate common points and instructions
+                        target_point = Point2D(pc.x + wpb.x, pc.y + wpb.y)
+                        target_instruction = self.get_instruction(target_point)
+                        rpa_point = Point2D(pc.x + rpa.x, pc.y + rpa.y)
+                        rpb_point = Point2D(pc.x + rpb.x, pc.y + rpb.y)
+
                         if ir.modifier == M_A:
-                            self.get_instruction(Point2D(pc.x + wpb.x, pc.y + wpb.y)).a_number = op(irb.a_number, ira.a_number)
-                            self.core_event(warrior, self.point_to_index(Point2D(pc.x + wpb.x, pc.y + wpb.y)), EVENT_A_WRITE)
-                            self.core_event(warrior, self.point_to_index(Point2D(pc.x + rpa.x, pc.y + rpa.y)), EVENT_A_READ)
-                            self.core_event(warrior, self.point_to_index(Point2D(pc.x + rpb.x, pc.y + rpb.y)), EVENT_A_READ)
+                            target_instruction.a_number = op(irb.a_number, ira.a_number)
+                            self.core_event(warrior, target_point, EVENT_A_WRITE)
+                            self.core_event(warrior, rpa_point, EVENT_A_READ)
+                            self.core_event(warrior, rpb_point, EVENT_A_READ)
                         elif ir.modifier == M_B:
-                            self.get_instruction(Point2D(pc.x + wpb.x, pc.y + wpb.y)).b_number = op(irb.b_number, ira.b_number)
-                            self.core_event(warrior, self.point_to_index(Point2D(pc.x + wpb.x, pc.y + wpb.y)), EVENT_B_WRITE)
-                            self.core_event(warrior, self.point_to_index(Point2D(pc.x + rpa.x, pc.y + rpa.y)), EVENT_B_READ)
-                            self.core_event(warrior, self.point_to_index(Point2D(pc.x + rpb.x, pc.y + rpb.y)), EVENT_B_READ)
+                            target_instruction.b_number = op(irb.b_number, ira.b_number)
+                            self.core_event(warrior, target_point, EVENT_B_WRITE)
+                            self.core_event(warrior, rpa_point, EVENT_B_READ)
+                            self.core_event(warrior, rpb_point, EVENT_B_READ)
                         elif ir.modifier == M_AB:
-                            self.get_instruction(Point2D(pc.x + wpb.x, pc.y + wpb.y)).b_number = op(irb.b_number, ira.a_number)
-                            self.core_event(warrior, self.point_to_index(Point2D(pc.x + wpb.x, pc.y + wpb.y)), EVENT_B_WRITE)
-                            self.core_event(warrior, self.point_to_index(Point2D(pc.x + rpa.x, pc.y + rpa.y)), EVENT_A_READ)
-                            self.core_event(warrior, self.point_to_index(Point2D(pc.x + rpb.x, pc.y + rpb.y)), EVENT_B_READ)
+                            target_instruction.b_number = op(irb.b_number, ira.a_number)
+                            self.core_event(warrior, target_point, EVENT_B_WRITE)
+                            self.core_event(warrior, rpa_point, EVENT_A_READ)
+                            self.core_event(warrior, rpb_point, EVENT_B_READ)
                         elif ir.modifier == M_BA:
-                            self.get_instruction(Point2D(pc.x + wpb.x, pc.y + wpb.y)).a_number = op(irb.b_number, ira.a_number)
-                            self.core_event(warrior, self.point_to_index(Point2D(pc.x + wpb.x, pc.y + wpb.y)), EVENT_A_WRITE)
-                            self.core_event(warrior, self.point_to_index(Point2D(pc.x + rpa.x, pc.y + rpa.y)), EVENT_A_READ)
-                            self.core_event(warrior, self.point_to_index(Point2D(pc.x + rpb.x, pc.y + rpb.y)), EVENT_B_READ)
+                            target_instruction.a_number = op(irb.b_number, ira.a_number)
+                            self.core_event(warrior, target_point, EVENT_A_WRITE)
+                            self.core_event(warrior, rpa_point, EVENT_A_READ)
+                            self.core_event(warrior, rpb_point, EVENT_B_READ)
                         elif ir.modifier == M_F or ir.modifier == M_I:
-                            self.get_instruction(Point2D(pc.x + wpb.x, pc.y + wpb.y)).a_number = op(irb.a_number, ira.a_number)
-                            self.get_instruction(Point2D(pc.x + wpb.x, pc.y + wpb.y)).b_number = op(irb.b_number, ira.b_number)
-                            self.core_event(warrior, self.point_to_index(Point2D(pc.x + wpb.x, pc.y + wpb.y)), EVENT_A_WRITE)
-                            self.core_event(warrior, self.point_to_index(Point2D(pc.x + wpb.x, pc.y + wpb.y)), EVENT_B_WRITE)
-                            self.core_event(warrior, self.point_to_index(Point2D(pc.x + rpa.x, pc.y + rpa.y)), EVENT_A_READ)
-                            self.core_event(warrior, self.point_to_index(Point2D(pc.x + rpb.x, pc.y + rpb.y)), EVENT_A_READ)
-                            self.core_event(warrior, self.point_to_index(Point2D(pc.x + rpa.x, pc.y + rpa.y)), EVENT_B_READ)
-                            self.core_event(warrior, self.point_to_index(Point2D(pc.x + rpb.x, pc.y + rpb.y)), EVENT_B_READ)
+                            target_instruction.a_number = op(irb.a_number, ira.a_number)
+                            target_instruction.b_number = op(irb.b_number, ira.b_number)
+                            self.core_event(warrior, target_point, EVENT_A_WRITE)
+                            self.core_event(warrior, target_point, EVENT_B_WRITE)
+                            self.core_event(warrior, rpa_point, EVENT_A_READ)
+                            self.core_event(warrior, rpb_point, EVENT_A_READ)
+                            self.core_event(warrior, rpa_point, EVENT_B_READ)
+                            self.core_event(warrior, rpb_point, EVENT_B_READ)
                         elif ir.modifier == M_X:
-                            self.get_instruction(Point2D(pc.x + wpb.x, pc.y + wpb.x)).b_number = op(irb.b_number, ira.a_number)
-                            self.get_instruction(Point2D(pc.x + wpb.x, pc.y + wpb.x)).a_number = op(irb.a_number, ira.b_number)
-                            self.core_event(warrior, self.point_to_index(Point2D(pc.x + wpb.x, pc.y + wpb.x)), EVENT_A_WRITE)
-                            self.core_event(warrior, self.point_to_index(Point2D(pc.x + wpb.x, pc.y + wpb.x)), EVENT_B_WRITE)
-                            self.core_event(warrior, self.point_to_index(Point2D(pc.x + rpa.x, pc.y + rpa.y)), EVENT_A_READ)
-                            self.core_event(warrior, self.point_to_index(Point2D(pc.x + rpb.x, pc.y + rpb.y)), EVENT_A_READ)
-                            self.core_event(warrior, self.point_to_index(Point2D(pc.x + rpa.x, pc.y + rpa.y)), EVENT_B_READ)
-                            self.core_event(warrior, self.point_to_index(Point2D(pc.x + rpb.x, pc.y + rpb.y)), EVENT_B_READ)
+                            target_instruction.b_number = op(irb.b_number, ira.a_number)
+                            target_instruction.a_number = op(irb.a_number, ira.b_number)
+                            self.core_event(warrior, target_point, EVENT_A_WRITE)
+                            self.core_event(warrior, target_point, EVENT_B_WRITE)
+                            self.core_event(warrior, rpa_point, EVENT_A_READ)
+                            self.core_event(warrior, rpb_point, EVENT_A_READ)
+                            self.core_event(warrior, rpa_point, EVENT_B_READ)
+                            self.core_event(warrior, rpb_point, EVENT_B_READ)
                         else:
                             raise ValueError("Invalid modifier: %d" % ir.modifier)
 
@@ -261,93 +267,101 @@ class MARS(object):
 
                 # comparison common code
                 def do_comparison(cmp):
+                    # Pre-calculate common points
+                    rpa_point = Point2D(pc.x + rpa.x, pc.y + rpa.y)
+                    rpb_point = Point2D(pc.x + rpb.x, pc.y + rpb.y)
+                    next_point = Point2D(pc.x + 1, pc.y)
+                    jump_point = Point2D(pc.x + 2, pc.y)
+
                     if ir.modifier == M_A:
-                        self.enqueue(warrior,
-                                     Point2D(pc.x + (2 if cmp(ira.a_number, irb.a_number) else 1), pc.y))
-                        self.core_event(warrior, self.point_to_index(Point2D(pc.x + rpa.x, pc.y + rpa.y)), EVENT_A_READ)
-                        self.core_event(warrior, self.point_to_index(Point2D(pc.x + rpb.x, pc.y + rpb.y)), EVENT_A_READ)
+                        result = cmp(ira.a_number, irb.a_number)
+                        self.enqueue(warrior, jump_point if result else next_point)
+                        self.core_event(warrior, rpa_point, EVENT_A_READ)
+                        self.core_event(warrior, rpb_point, EVENT_A_READ)
                     elif ir.modifier == M_B:
-                        self.enqueue(warrior,
-                                     Point2D(pc.x + (2 if cmp(ira.b_number, irb.b_number) else 1), pc.y))
-                        self.core_event(warrior, self.point_to_index(Point2D(pc.x + rpa.x, pc.y + rpa.y)), EVENT_B_READ)
-                        self.core_event(warrior, self.point_to_index(Point2D(pc.x + rpb.x, pc.y + rpb.y)), EVENT_B_READ)
+                        result = cmp(ira.b_number, irb.b_number)
+                        self.enqueue(warrior, jump_point if result else next_point)
+                        self.core_event(warrior, rpa_point, EVENT_B_READ)
+                        self.core_event(warrior, rpb_point, EVENT_B_READ)
                     elif ir.modifier == M_AB:
-                        self.enqueue(warrior,
-                                     Point2D(pc.x + (2 if cmp(ira.a_number, irb.b_number) else 1), pc.y))
-                        self.core_event(warrior, self.point_to_index(Point2D(pc.x + rpa.x, pc.y + rpa.y)), EVENT_A_READ)
-                        self.core_event(warrior, self.point_to_index(Point2D(pc.x + rpb.x, pc.y + rpb.y)), EVENT_B_READ)
+                        result = cmp(ira.a_number, irb.b_number)
+                        self.enqueue(warrior, jump_point if result else next_point)
+                        self.core_event(warrior, rpa_point, EVENT_A_READ)
+                        self.core_event(warrior, rpb_point, EVENT_B_READ)
                     elif ir.modifier == M_BA:
-                        self.enqueue(warrior,
-                                     Point2D(pc.x + (2 if cmp(ira.b_number, irb.a_number) else 1), pc.y))
-                        self.core_event(warrior, self.point_to_index(Point2D(pc.x + rpa.x, pc.y + rpa.y)), EVENT_B_READ)
-                        self.core_event(warrior, self.point_to_index(Point2D(pc.x + rpb.x, pc.y + rpb.y)), EVENT_A_READ)
+                        result = cmp(ira.b_number, irb.a_number)
+                        self.enqueue(warrior, jump_point if result else next_point)
+                        self.core_event(warrior, rpa_point, EVENT_B_READ)
+                        self.core_event(warrior, rpb_point, EVENT_A_READ)
                     elif ir.modifier == M_F:
-                        self.enqueue(warrior,
-                                     Point2D(pc.x + (2 if cmp(ira.a_number, irb.a_number) and
-                                                cmp(ira.b_number, irb.b_number) else 1), pc.y))
-                        self.core_event(warrior, self.point_to_index(Point2D(pc.x + rpa.x, pc.y + rpa.y)), EVENT_A_READ)
-                        self.core_event(warrior, self.point_to_index(Point2D(pc.x + rpb.x, pc.y + rpb.y)), EVENT_A_READ)
-                        self.core_event(warrior, self.point_to_index(Point2D(pc.x + rpa.x, pc.y + rpa.y)), EVENT_B_READ)
-                        self.core_event(warrior, self.point_to_index(Point2D(pc.x + rpb.x, pc.y + rpb.y)), EVENT_B_READ)
+                        result = cmp(ira.a_number, irb.a_number) and cmp(ira.b_number, irb.b_number)
+                        self.enqueue(warrior, jump_point if result else next_point)
+                        self.core_event(warrior, rpa_point, EVENT_A_READ)
+                        self.core_event(warrior, rpb_point, EVENT_A_READ)
+                        self.core_event(warrior, rpa_point, EVENT_B_READ)
+                        self.core_event(warrior, rpb_point, EVENT_B_READ)
                     elif ir.modifier == M_X:
-                        self.enqueue(warrior,
-                                     Point2D(pc.x + (2 if cmp(ira.a_number, irb.b_number) and
-                                                cmp(ira.b_number, irb.a_number) else 1), pc.y))
-                        self.core_event(warrior, self.point_to_index(Point2D(pc.x + rpa.x, pc.y + rpa.y)), EVENT_A_READ)
-                        self.core_event(warrior, self.point_to_index(Point2D(pc.x + rpb.x, pc.y + rpb.y)), EVENT_A_READ)
-                        self.core_event(warrior, self.point_to_index(Point2D(pc.x + rpa.x, pc.y + rpa.y)), EVENT_B_READ)
-                        self.core_event(warrior, self.point_to_index(Point2D(pc.x + rpb.x, pc.y + rpb.y)), EVENT_B_READ)
+                        result = cmp(ira.a_number, irb.b_number) and cmp(ira.b_number, irb.a_number)
+                        self.enqueue(warrior, jump_point if result else next_point)
+                        self.core_event(warrior, rpa_point, EVENT_A_READ)
+                        self.core_event(warrior, rpb_point, EVENT_A_READ)
+                        self.core_event(warrior, rpa_point, EVENT_B_READ)
+                        self.core_event(warrior, rpb_point, EVENT_B_READ)
                     elif ir.modifier == M_I:
-                        self.enqueue(warrior,
-                                     Point2D(pc.x + (2 if ira == irb else 1), pc.y))
-                        self.core_event(warrior, self.point_to_index(Point2D(pc.x + rpa.x, pc.y + rpa.y)), EVENT_I_READ)
-                        self.core_event(warrior, self.point_to_index(Point2D(pc.x + rpb.x, pc.y + rpb.y)), EVENT_I_READ)
+                        result = ira == irb
+                        self.enqueue(warrior, jump_point if result else next_point)
+                        self.core_event(warrior, rpa_point, EVENT_I_READ)
+                        self.core_event(warrior, rpb_point, EVENT_I_READ)
                     else:
                         raise ValueError("Invalid modifier: %d" % ir.modifier)
 
                 self.core_event(warrior, pc, EVENT_EXECUTED)
 
+                # execute the instruction
                 if ir.opcode == DAT:
                     # does not enqueue next instruction, therefore, killing the
                     # process
                     pass
                 elif ir.opcode == MOV:
+                    # Pre-calculate common points and instructions
+                    target_point = Point2D(pc.x + wpb.x, pc.y + wpb.y)
+                    target_instruction = self.get_instruction(target_point)
+                    rpa_point = Point2D(pc.x + rpa.x, pc.y + rpa.y)
+
                     if ir.modifier == M_A:
-                        self.get_instruction(Point2D(pc.x + wpb.x, pc.y + wpb.y)).a_number = ira.a_number
-                        self.core_event(warrior, self.point_to_index(Point2D(pc.x + rpa.x, pc.y + rpa.y)), EVENT_A_READ)
-                        self.core_event(warrior, self.point_to_index(Point2D(pc.x + wpb.x, pc.y + wpb.y)), EVENT_A_WRITE)
+                        target_instruction.a_number = ira.a_number
+                        self.core_event(warrior, rpa_point, EVENT_A_READ)
+                        self.core_event(warrior, target_point, EVENT_A_WRITE)
                     elif ir.modifier == M_B:
-                        self.get_instruction(Point2D(pc.x + wpb.x, pc.y + wpb.y)).b_number = ira.b_number
-                        self.core_event(warrior, self.point_to_index(Point2D(pc.x + rpa.x, pc.y + rpa.y)), EVENT_B_READ)
-                        self.core_event(warrior, self.point_to_index(Point2D(pc.x + wpb.x, pc.y + wpb.y)), EVENT_B_WRITE)
+                        target_instruction.b_number = ira.b_number
+                        self.core_event(warrior, rpa_point, EVENT_B_READ)
+                        self.core_event(warrior, target_point, EVENT_B_WRITE)
                     elif ir.modifier == M_AB:
-                        self.get_instruction(Point2D(pc.x + wpb.x, pc.y + wpb.y)).b_number = ira.a_number
-                        self.core_event(warrior, self.point_to_index(Point2D(pc.x + rpa.x, pc.y + rpa.y)), EVENT_A_READ)
-                        self.core_event(warrior, self.point_to_index(Point2D(pc.x + wpb.x, pc.y + wpb.y)), EVENT_B_WRITE)
+                        target_instruction.b_number = ira.a_number
+                        self.core_event(warrior, rpa_point, EVENT_A_READ)
+                        self.core_event(warrior, target_point, EVENT_B_WRITE)
                     elif ir.modifier == M_BA:
-                        self.get_instruction(Point2D(pc.x + wpb.x, pc.y + wpb.y)).a_number = ira.b_number
-                        self.core_event(warrior, self.point_to_index(Point2D(pc.x + rpa.x, pc.y + rpa.y)), EVENT_B_READ)
-                        self.core_event(warrior, self.point_to_index(Point2D(pc.x + wpb.x, pc.y + wpb.y)), EVENT_A_WRITE)
+                        target_instruction.a_number = ira.b_number
+                        self.core_event(warrior, rpa_point, EVENT_B_READ)
+                        self.core_event(warrior, target_point, EVENT_A_WRITE)
                     elif ir.modifier == M_F:
-                        self.get_instruction(Point2D(pc.x + wpb.x, pc.y + wpb.y)).a_number = ira.a_number
-                        self.get_instruction(Point2D(pc.x + wpb.x, pc.y + wpb.y)).b_number = ira.b_number
-                        self.core_event(warrior, self.point_to_index(Point2D(pc.x + rpa.x, pc.y + rpa.y)), EVENT_A_READ)
-                        self.core_event(warrior, self.point_to_index(Point2D(pc.x + rpa.x, pc.y + rpa.y)), EVENT_B_READ)
-                        self.core_event(warrior, self.point_to_index(Point2D(pc.x + wpb.x, pc.y + wpb.y)), EVENT_A_WRITE)
-                        self.core_event(warrior, self.point_to_index(Point2D(pc.x + wpb.x, pc.y + wpb.y)), EVENT_B_WRITE)
+                        target_instruction.a_number = ira.a_number
+                        target_instruction.b_number = ira.b_number
+                        self.core_event(warrior, rpa_point, EVENT_A_READ)
+                        self.core_event(warrior, rpa_point, EVENT_B_READ)
+                        self.core_event(warrior, target_point, EVENT_A_WRITE)
+                        self.core_event(warrior, target_point, EVENT_B_WRITE)
                     elif ir.modifier == M_X:
-                        self.get_instruction(Point2D(pc.x + wpb.x, pc.y + wpb.y)).b_number = ira.a_number
-                        self.get_instruction(Point2D(pc.x + wpb.x, pc.y + wpb.y)).a_number = ira.b_number
-                        self.core_event(warrior, self.point_to_index(Point2D(pc.x + rpa.x, pc.y + rpa.y)), EVENT_A_READ)
-                        self.core_event(warrior, self.point_to_index(Point2D(pc.x + rpb.x, pc.y + rpb.y)), EVENT_A_READ)
-                        self.core_event(warrior, self.point_to_index(Point2D(pc.x + rpa.x, pc.y + rpa.y)), EVENT_B_READ)
-                        self.core_event(warrior, self.point_to_index(Point2D(pc.x + rpb.x, pc.y + rpb.y)), EVENT_B_READ)
-                        self.core_event(warrior, self.point_to_index(Point2D(pc.x + wpb.x, pc.y + wpb.y)), EVENT_A_WRITE)
-                        self.core_event(warrior, self.point_to_index(Point2D(pc.x + wpb.x, pc.y + wpb.y)), EVENT_B_WRITE)
+                        target_instruction.b_number = ira.a_number
+                        target_instruction.a_number = ira.b_number
+                        self.core_event(warrior, rpa_point, EVENT_A_READ)
+                        self.core_event(warrior, rpa_point, EVENT_B_READ)
+                        self.core_event(warrior, target_point, EVENT_A_WRITE)
+                        self.core_event(warrior, target_point, EVENT_B_WRITE)
                     elif ir.modifier == M_I:
-                        self.set_instruction(Point2D(pc.x + wpb.x, pc.y + wpb.y), ira)
-                        self.core_event(warrior, self.point_to_index(Point2D(pc.x + rpa.x, pc.y + rpa.y)), EVENT_I_READ)
-                        self.core_event(warrior, self.point_to_index(Point2D(pc.x + wpb.x, pc.y + wpb.y)), EVENT_I_WRITE)
+                        self.set_instruction(target_point, ira)
+                        self.core_event(warrior, rpa_point, EVENT_I_READ)
+                        self.core_event(warrior, target_point, EVENT_I_WRITE)
                     else:
                         raise ValueError("Invalid modifier: %d" % ir.modifier)
 
@@ -368,30 +382,30 @@ class MARS(object):
                 elif ir.opcode == JMZ:
                     if ir.modifier == M_A or ir.modifier == M_BA:
                         self.enqueue(warrior, Point2D(pc.x + (rpa.x if irb.a_number == 0 else 1), pc.y))
-                        self.core_event(warrior, self.point_to_index(Point2D(pc.x + rpa.x, pc.y + rpa.y)), EVENT_A_READ)
+                        self.core_event(warrior, Point2D(pc.x + rpa.x, pc.y + rpa.y), EVENT_A_READ)
                     elif ir.modifier == M_B or ir.modifier == M_AB:
                         self.enqueue(warrior, Point2D(pc.x + (rpa.x if irb.b_number == 0 else 1), pc.y))
-                        self.core_event(warrior, self.point_to_index(Point2D(pc.x + rpa.x, pc.y + rpa.y)), EVENT_B_READ)
+                        self.core_event(warrior, Point2D(pc.x + rpa.x, pc.y + rpa.y), EVENT_B_READ)
                     elif ir.modifier in (M_F, M_X, M_I):
                         self.enqueue(warrior,
-                                     Point2D(pc.x + (rpa.x if irb.a_number == irb.b_number == 0 else 1), pc.y))
-                        self.core_event(warrior, self.point_to_index(Point2D(pc.x + rpa.x, pc.y + rpa.y)), EVENT_A_READ)
-                        self.core_event(warrior, self.point_to_index(Point2D(pc.x + rpa.x, pc.y + rpa.y)), EVENT_B_READ)
+                                      Point2D(pc.x + (rpa.x if irb.a_number == irb.b_number == 0 else 1), pc.y))
+                        self.core_event(warrior, Point2D(pc.x + rpa.x, pc.y + rpa.y), EVENT_A_READ)
+                        self.core_event(warrior, Point2D(pc.x + rpa.x, pc.y + rpa.y), EVENT_B_READ)
                     else:
                         raise ValueError("Invalid modifier: %d" % ir.modifier)
                 elif ir.opcode == JMN:
                     if ir.modifier == M_A or ir.modifier == M_BA:
                         self.enqueue(warrior, Point2D(pc.x + (rpa.x if irb.a_number != 0 else 1), pc.y))
-                        self.core_event(warrior, self.point_to_index(Point2D(pc.x + rpa.x, pc.y + rpa.y)), EVENT_A_READ)
+                        self.core_event(warrior, Point2D(pc.x + rpa.x, pc.y + rpa.y), EVENT_A_READ)
                     elif ir.modifier == M_B or ir.modifier == M_AB:
                         self.enqueue(warrior, Point2D(pc.x + (rpa.x if irb.b_number != 0 else 1), pc.y))
-                        self.core_event(warrior, self.point_to_index(Point2D(pc.x + rpa.x, pc.y + rpa.y)), EVENT_B_READ)
+                        self.core_event(warrior, Point2D(pc.x + rpa.x, pc.y + rpa.y), EVENT_B_READ)
                     elif ir.modifier in (M_F, M_X, M_I):
                         self.enqueue(warrior,
-                                     Point2D(pc.x + (rpa.x if irb.a_number != 0 or
-                                                  irb.b_number != 0 else 1), pc.y))
-                        self.core_event(warrior, self.point_to_index(Point2D(pc.x + rpa.x, pc.y + rpa.y)), EVENT_A_READ)
-                        self.core_event(warrior, self.point_to_index(Point2D(pc.x + rpa.x, pc.y + rpa.y)), EVENT_B_READ)
+                                      Point2D(pc.x + (rpa.x if irb.a_number != 0 or
+                                                   irb.b_number != 0 else 1), pc.y))
+                        self.core_event(warrior, Point2D(pc.x + rpa.x, pc.y + rpa.y), EVENT_A_READ)
+                        self.core_event(warrior, Point2D(pc.x + rpa.x, pc.y + rpa.y), EVENT_B_READ)
                     else:
                         raise ValueError("Invalid modifier: %d" % ir.modifier)
                 elif ir.opcode == DJN:
@@ -399,26 +413,26 @@ class MARS(object):
                         self.get_instruction(Point2D(pc.x + wpb.x, pc.y + wpb.y)).a_number -= 1
                         irb.a_number -= 1
                         self.enqueue(warrior, Point2D(pc.x + (rpa.x if irb.a_number != 0 else 1), pc.y))
-                        self.core_event(warrior, self.point_to_index(Point2D(pc.x + rpa.x, pc.y + rpa.y)), EVENT_A_READ)
-                        self.core_event(warrior, self.point_to_index(Point2D(pc.x + rpa.x, pc.y + rpa.y)), EVENT_A_DEC)
+                        self.core_event(warrior, Point2D(pc.x + rpa.x, pc.y + rpa.y), EVENT_A_READ)
+                        self.core_event(warrior, Point2D(pc.x + rpa.x, pc.y + rpa.y), EVENT_A_DEC)
                     elif ir.modifier == M_B or ir.modifier == M_AB:
                         self.get_instruction(Point2D(pc.x + wpb.x, pc.y + wpb.y)).b_number -= 1
                         irb.b_number -= 1
                         self.enqueue(warrior, Point2D(pc.x + (rpa.x if irb.b_number != 0 else 1), pc.y))
-                        self.core_event(warrior, self.point_to_index(Point2D(pc.x + rpa.x, pc.y + rpa.y)), EVENT_B_READ)
-                        self.core_event(warrior, self.point_to_index(Point2D(pc.x + rpa.x, pc.y + rpa.y)), EVENT_B_DEC)
+                        self.core_event(warrior, Point2D(pc.x + rpa.x, pc.y + rpa.y), EVENT_B_READ)
+                        self.core_event(warrior, Point2D(pc.x + rpa.x, pc.y + rpa.y), EVENT_B_DEC)
                     elif ir.modifier in (M_F, M_X, M_I):
                         self.get_instruction(Point2D(pc.x + wpb.x, pc.y + wpb.y)).a_number -= 1
                         irb.a_number -= 1
                         self.get_instruction(Point2D(pc.x + wpb.x, pc.y + wpb.y)).b_number -= 1
                         irb.b_number -= 1
                         self.enqueue(warrior,
-                                     Point2D(pc.x + (rpa.x if irb.a_number != 0 or
-                                                  irb.b_number != 0 else 1), pc.y))
-                        self.core_event(warrior, self.point_to_index(Point2D(pc.x + rpa.x, pc.y + rpa.y)), EVENT_A_READ)
-                        self.core_event(warrior, self.point_to_index(Point2D(pc.x + rpa.x, pc.y + rpa.y)), EVENT_B_READ)
-                        self.core_event(warrior, self.point_to_index(Point2D(pc.x + rpa.x, pc.y + rpa.y)), EVENT_A_DEC)
-                        self.core_event(warrior, self.point_to_index(Point2D(pc.x + rpa.x, pc.y + rpa.y)), EVENT_B_DEC)
+                                      Point2D(pc.x + (rpa.x if irb.a_number != 0 or
+                                                   irb.b_number != 0 else 1), pc.y))
+                        self.core_event(warrior, Point2D(pc.x + rpa.x, pc.y + rpa.y), EVENT_A_READ)
+                        self.core_event(warrior, Point2D(pc.x + rpa.x, pc.y + rpa.y), EVENT_B_READ)
+                        self.core_event(warrior, Point2D(pc.x + rpa.x, pc.y + rpa.y), EVENT_A_DEC)
+                        self.core_event(warrior, Point2D(pc.x + rpa.x, pc.y + rpa.y), EVENT_B_DEC)
                     else:
                         raise ValueError("Invalid modifier: %d" % ir.modifier)
                 elif ir.opcode == SPL:
