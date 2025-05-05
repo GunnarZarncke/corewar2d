@@ -36,6 +36,12 @@ class Core(object):
             import traceback
             traceback.print_stack()
             raise ValueError("Point2D expected")
+            
+        ## For 1D addressing (y=0), just wrap x around the core size
+        #if point.y == 0:
+        #    return point.x % self.size
+            
+        # For 2D addressing, handle both x and y wrapping
         round_x = point.x // self.width    # how many times you wrapped in x
         x_new  = point.x % self.width
 
@@ -56,6 +62,11 @@ class Core(object):
 
     def trim(self, value):
         "Return a trimmed value to the bounds of the core size"
+        # For 1D addressing (y=0), just wrap x around the core size
+        #if value.y == 0:
+        #    return Point2D(value.x % self.size, 0)
+            
+        # For 2D addressing, handle both x and y wrapping
         round_x = value.x // self.width   # how many times you wrapped in x
         x_new  = value.x % self.width
 
@@ -68,6 +79,11 @@ class Core(object):
 
     def trim_signed(self, value):
         "Return a trimmed value to the bounds of -core size to +core size"
+        # For 1D addressing (y=0), just wrap x around the core size
+        #if value.y == 0:
+        #    return Point2D(value.x % self.size, 0)
+            
+        # For 2D addressing, handle both x and y wrapping
         round_x = value.x // self.width   # how many times you wrapped in x
         x_new  = value.x % self.width
 
