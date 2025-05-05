@@ -118,9 +118,200 @@ class MARS(object):
     def __getitem__(self, point):
         return self.get_instruction(point)
 
+    def evaluate_operand(self, pc, number, mode, warrior):
+        """Evaluate an operand (A or B) and return (read_point, write_point, pip_point)."""
+        if mode == IMMEDIATE:
+            return Point2D(0), Point2D(0), None
+        else:
+            read_point = write_point = Point2D(number)
+            pip_point = None
+
+            if mode != DIRECT:
+                pip_point = Point2D(pc.x + write_point.x, pc.y + write_point.y)
+
+                # pre-decrement, if needed
+                if mode == PREDEC_A:
+                    self.get_instruction(pip_point).a_number -= 1
+                    self.core_event(warrior, pip_point, EVENT_A_DEC)
+                elif mode == PREDEC_B:
+                    self.get_instruction(pip_point).b_number -= 1
+                    self.core_event(warrior, pip_point, EVENT_B_DEC)
+
+                # calculate the indirect address
+                if mode in (PREDEC_A, INDIRECT_A, POSTINC_A):
+                    read_point = Point2D(read_point.x + self.get_instruction(Point2D(pc.x + read_point.x, pc.y + read_point.y)).a_number, 0)
+                    write_point = Point2D(write_point.x + self.get_instruction(Point2D(pc.x + write_point.x, pc.y + write_point.y)).a_number, 0)
+                else:
+                    read_point = Point2D(read_point.x + self.get_instruction(Point2D(pc.x + read_point.x, pc.y + read_point.y)).b_number, 0)
+                    write_point = Point2D(write_point.x + self.get_instruction(Point2D(pc.x + write_point.x, pc.y + write_point.y)).b_number, 0)
+
+            return read_point, write_point, pip_point
+
+    def handle_post_increment(self, pip_point, mode, warrior):
+        """Handle post-increment operations."""
+        if pip_point is None:
+            return
+
+        if mode == POSTINC_A:
+            self.get_instruction(pip_point).a_number += 1
+            self.core_event(warrior, pip_point, EVENT_A_INC)
+        elif mode == POSTINC_B:
+            self.get_instruction(pip_point).b_number += 1
+            self.core_event(warrior, pip_point, EVENT_B_INC)
+
+    def execute_instruction(self, warrior, pc, ir, ira, irb, rpa, rpb, wpb):
+        """Execute a single instruction based on its opcode."""
+        if ir.opcode == DAT:
+            # does not enqueue next instruction, therefore, killing the process
+            pass
+        elif ir.opcode == MOV:
+            self.execute_mov(warrior, pc, ir, ira, rpa, wpb)
+        elif ir.opcode == ADD:
+            self.do_arithmetic(warrior, pc, ir, ira, irb, rpa, rpb, wpb, operator.add)
+        elif ir.opcode == SUB:
+            self.do_arithmetic(warrior, pc, ir, ira, irb, rpa, rpb, wpb, operator.sub)
+        elif ir.opcode == MUL:
+            self.do_arithmetic(warrior, pc, ir, ira, irb, rpa, rpb, wpb, operator.mul)
+        elif ir.opcode == DIV:
+            self.do_arithmetic(warrior, pc, ir, ira, irb, rpa, rpb, wpb, operator.truediv)
+        elif ir.opcode == MOD:
+            self.do_arithmetic(warrior, pc, ir, ira, irb, rpa, rpb, wpb, operator.mod)
+        elif ir.opcode == JMP:
+            self.enqueue(warrior, Point2D(pc.x + rpa.x, pc.y + rpa.y))
+        elif ir.opcode == JMZ:
+            self.execute_jmz(warrior, pc, ir, irb, rpa)
+        elif ir.opcode == JMN:
+            self.execute_jmn(warrior, pc, ir, irb, rpa)
+        elif ir.opcode == DJN:
+            self.execute_djn(warrior, pc, ir, irb, rpa, wpb)
+        elif ir.opcode == SPL:
+            self.enqueue(warrior, Point2D(pc.x + 1, pc.y))
+            self.enqueue(warrior, Point2D(pc.x + rpa.x, pc.y + rpa.y))
+        elif ir.opcode == SLT:
+            self.do_comparison(warrior, pc, ir, ira, irb, rpa, rpb, operator.lt)
+        elif ir.opcode == CMP or ir.opcode == SEQ:
+            self.do_comparison(warrior, pc, ir, ira, irb, rpa, rpb, operator.eq)
+        elif ir.opcode == SNE:
+            self.do_comparison(warrior, pc, ir, ira, irb, rpa, rpb, operator.ne)
+        elif ir.opcode == NOP:
+            self.enqueue(warrior, Point2D(pc.x + 1, pc.y))
+        else:
+            raise ValueError("Invalid opcode: %d" % ir.opcode)
+
+    def execute_mov(self, warrior, pc, ir, ira, rpa, wpb):
+        """Execute a MOV instruction."""
+        target_point = Point2D(pc.x + wpb.x, pc.y + wpb.y)
+        target_instruction = self.get_instruction(target_point)
+        rpa_point = Point2D(pc.x + rpa.x, pc.y + rpa.y)
+
+        if ir.modifier == M_A:
+            target_instruction.a_number = ira.a_number
+            self.core_event(warrior, rpa_point, EVENT_A_READ)
+            self.core_event(warrior, target_point, EVENT_A_WRITE)
+        elif ir.modifier == M_B:
+            target_instruction.b_number = ira.b_number
+            self.core_event(warrior, rpa_point, EVENT_B_READ)
+            self.core_event(warrior, target_point, EVENT_B_WRITE)
+        elif ir.modifier == M_AB:
+            target_instruction.b_number = ira.a_number
+            self.core_event(warrior, rpa_point, EVENT_A_READ)
+            self.core_event(warrior, target_point, EVENT_B_WRITE)
+        elif ir.modifier == M_BA:
+            target_instruction.a_number = ira.b_number
+            self.core_event(warrior, rpa_point, EVENT_B_READ)
+            self.core_event(warrior, target_point, EVENT_A_WRITE)
+        elif ir.modifier == M_F:
+            target_instruction.a_number = ira.a_number
+            target_instruction.b_number = ira.b_number
+            self.core_event(warrior, rpa_point, EVENT_A_READ)
+            self.core_event(warrior, rpa_point, EVENT_B_READ)
+            self.core_event(warrior, target_point, EVENT_A_WRITE)
+            self.core_event(warrior, target_point, EVENT_B_WRITE)
+        elif ir.modifier == M_X:
+            target_instruction.b_number = ira.a_number
+            target_instruction.a_number = ira.b_number
+            self.core_event(warrior, rpa_point, EVENT_A_READ)
+            self.core_event(warrior, rpa_point, EVENT_B_READ)
+            self.core_event(warrior, target_point, EVENT_A_WRITE)
+            self.core_event(warrior, target_point, EVENT_B_WRITE)
+        elif ir.modifier == M_I:
+            self.set_instruction(target_point, ira)
+            self.core_event(warrior, rpa_point, EVENT_I_READ)
+            self.core_event(warrior, target_point, EVENT_I_WRITE)
+        else:
+            raise ValueError("Invalid modifier: %d" % ir.modifier)
+
+        self.enqueue(warrior, Point2D(pc.x + 1, pc.y))
+
+    def execute_jmz(self, warrior, pc, ir, irb, rpa):
+        """Execute a JMZ instruction."""
+        rpa_point = Point2D(pc.x + rpa.x, pc.y + rpa.y)
+        next_point = Point2D(pc.x + 1, pc.y)
+
+        if ir.modifier == M_A or ir.modifier == M_BA:
+            self.enqueue(warrior, rpa_point if irb.a_number == 0 else next_point)
+            self.core_event(warrior, rpa_point, EVENT_A_READ)
+        elif ir.modifier == M_B or ir.modifier == M_AB:
+            self.enqueue(warrior, rpa_point if irb.b_number == 0 else next_point)
+            self.core_event(warrior, rpa_point, EVENT_B_READ)
+        elif ir.modifier in (M_F, M_X, M_I):
+            self.enqueue(warrior, rpa_point if irb.a_number == irb.b_number == 0 else next_point)
+            self.core_event(warrior, rpa_point, EVENT_A_READ)
+            self.core_event(warrior, rpa_point, EVENT_B_READ)
+        else:
+            raise ValueError("Invalid modifier: %d" % ir.modifier)
+
+    def execute_jmn(self, warrior, pc, ir, irb, rpa):
+        """Execute a JMN instruction."""
+        rpa_point = Point2D(pc.x + rpa.x, pc.y + rpa.y)
+        next_point = Point2D(pc.x + 1, pc.y)
+
+        if ir.modifier == M_A or ir.modifier == M_BA:
+            self.enqueue(warrior, rpa_point if irb.a_number != 0 else next_point)
+            self.core_event(warrior, rpa_point, EVENT_A_READ)
+        elif ir.modifier == M_B or ir.modifier == M_AB:
+            self.enqueue(warrior, rpa_point if irb.b_number != 0 else next_point)
+            self.core_event(warrior, rpa_point, EVENT_B_READ)
+        elif ir.modifier in (M_F, M_X, M_I):
+            self.enqueue(warrior, rpa_point if irb.a_number != 0 or irb.b_number != 0 else next_point)
+            self.core_event(warrior, rpa_point, EVENT_A_READ)
+            self.core_event(warrior, rpa_point, EVENT_B_READ)
+        else:
+            raise ValueError("Invalid modifier: %d" % ir.modifier)
+
+    def execute_djn(self, warrior, pc, ir, irb, rpa, wpb):
+        """Execute a DJN instruction."""
+        target_point = Point2D(pc.x + wpb.x, pc.y + wpb.y)
+        rpa_point = Point2D(pc.x + rpa.x, pc.y + rpa.y)
+        next_point = Point2D(pc.x + 1, pc.y)
+
+        if ir.modifier == M_A or ir.modifier == M_BA:
+            self.get_instruction(target_point).a_number -= 1
+            irb.a_number -= 1
+            self.enqueue(warrior, rpa_point if irb.a_number != 0 else next_point)
+            self.core_event(warrior, rpa_point, EVENT_A_READ)
+            self.core_event(warrior, rpa_point, EVENT_A_DEC)
+        elif ir.modifier == M_B or ir.modifier == M_AB:
+            self.get_instruction(target_point).b_number -= 1
+            irb.b_number -= 1
+            self.enqueue(warrior, rpa_point if irb.b_number != 0 else next_point)
+            self.core_event(warrior, rpa_point, EVENT_B_READ)
+            self.core_event(warrior, rpa_point, EVENT_B_DEC)
+        elif ir.modifier in (M_F, M_X, M_I):
+            self.get_instruction(target_point).a_number -= 1
+            irb.a_number -= 1
+            self.get_instruction(target_point).b_number -= 1
+            irb.b_number -= 1
+            self.enqueue(warrior, rpa_point if irb.a_number != 0 or irb.b_number != 0 else next_point)
+            self.core_event(warrior, rpa_point, EVENT_A_READ)
+            self.core_event(warrior, rpa_point, EVENT_B_READ)
+            self.core_event(warrior, rpa_point, EVENT_A_DEC)
+            self.core_event(warrior, rpa_point, EVENT_B_DEC)
+        else:
+            raise ValueError("Invalid modifier: %d" % ir.modifier)
+
     def step(self):
-        """Run one simulation step: execute one task of every active warrior.
-        """
+        """Run one simulation step: execute one task of every active warrior."""
         for warrior in self.warriors:
             if warrior.task_queue:
                 # The process counter is the next instruction-address in the
@@ -132,322 +323,123 @@ class MARS(object):
                 # copy the current instruction to the instruction register
                 ir = copy(self.get_instruction(pc))
 
-                #print(f"warrior: {warrior.name}, pc: {pc}, ir: {ir}")
-
                 # evaluate the A-operand
-                if ir.a_mode == IMMEDIATE:
-                    # if the mode is immediate, reading and writing a-pointers
-                    # are zero
-                    rpa = wpa = Point2D(0)
-                else:
-                    # not immediate: direct or one of the indirect modes
-                    rpa = Point2D(ir.a_number)
-                    wpa = Point2D(ir.a_number)
-
-                    if ir.a_mode != DIRECT:
-                        # one of the indirect modes
-
-                        # save this in case we need to use to post-increment
-                        pip = Point2D(pc.x + wpa.x, pc.y + wpa.y)
-
-                        # pre-decrement, if needed
-                        if ir.a_mode == PREDEC_A:
-                            self.get_instruction(Point2D(pc.x + wpa.x, pc.y + wpa.y)).a_number -= 1
-                            self.core_event(warrior, Point2D(pc.x + wpa.x, pc.y + wpa.y), EVENT_A_DEC)
-                        elif ir.a_mode == PREDEC_B:
-                            self.get_instruction(Point2D(pc.x + wpa.x, pc.y + wpa.y)).b_number -= 1
-                            self.core_event(warrior, Point2D(pc.x + wpa.x, pc.y + wpa.y), EVENT_B_DEC)
-
-                        # calculate the indirect address, from A or B number
-                        if ir.a_mode in (PREDEC_A, INDIRECT_A, POSTINC_A):
-                            rpa = Point2D(rpa.x + self.get_instruction(Point2D(pc.x + rpa.x, pc.y + rpa.y)).a_number, 0)
-                            wpa = Point2D(wpa.x + self.get_instruction(Point2D(pc.x + wpa.x, pc.y + wpa.y)).a_number, 0)
-                        else:
-                            rpa = Point2D(rpa.x + self.get_instruction(Point2D(pc.x + rpa.x, pc.y + rpa.y)).b_number, 0)
-                            wpa = Point2D(wpa.x + self.get_instruction(Point2D(pc.x + wpa.x, pc.y + wpa.y)).b_number, 0)
-
-                # copy instruction pointer by A
+                rpa, wpa, pip_a = self.evaluate_operand(pc, ir.a_number, ir.a_mode, warrior)
                 ira = copy(self.get_instruction(Point2D(pc.x + rpa.x, pc.y + rpa.y)))
+                self.handle_post_increment(pip_a, ir.a_mode, warrior)
 
-                # post-increment, if needed
-                if ir.a_mode == POSTINC_A:
-                    self.get_instruction(pip).a_number += 1
-                    self.core_event(warrior, pip, EVENT_A_INC)
-                elif ir.a_mode == POSTINC_B:
-                    self.get_instruction(pip).b_number += 1
-                    self.core_event(warrior, pip, EVENT_B_INC)
-
-                # evaluate the B-operand - pretty much the same as A
-                if ir.b_mode == IMMEDIATE:
-                    rpb = wpb = Point2D(0)
-                else:
-                    rpb = Point2D(ir.b_number)
-                    wpb = Point2D(ir.b_number)
-
-                    if ir.b_mode != DIRECT:
-                        pip = Point2D(pc.x + wpb.x, pc.y + wpb.y)
-
-                        if ir.b_mode == PREDEC_A:
-                            self.get_instruction(Point2D(pc.x + wpb.x, pc.y + wpb.y)).a_number -= 1
-                            self.core_event(warrior, Point2D(pc.x + wpb.x, pc.y + wpb.y), EVENT_A_DEC)
-                        elif ir.b_mode == PREDEC_B:
-                            self.get_instruction(Point2D(pc.x + wpb.x, pc.y + wpb.y)).b_number -= 1
-                            self.core_event(warrior, Point2D(pc.x + wpb.x, pc.y + wpb.y), EVENT_B_DEC)
-
-                        if ir.b_mode in (PREDEC_A, INDIRECT_A, POSTINC_A):
-                            rpb = Point2D(rpb.x + self.get_instruction(Point2D(pc.x + rpb.x, pc.y + rpb.y)).a_number, 0)
-                            wpb = Point2D(wpb.x + self.get_instruction(Point2D(pc.x + wpb.x, pc.y + wpb.y)).a_number, 0)
-                        else:
-                            rpb = Point2D(rpb.x + self.get_instruction(Point2D(pc.x + rpb.x, pc.y + rpb.y)).b_number, 0)
-                            wpb = Point2D(wpb.x + self.get_instruction(Point2D(pc.x + wpb.x, pc.y + wpb.y)).b_number, 0)
-
+                # evaluate the B-operand
+                rpb, wpb, pip_b = self.evaluate_operand(pc, ir.b_number, ir.b_mode, warrior)
                 irb = copy(self.get_instruction(Point2D(pc.x + rpb.x, pc.y + rpb.y)))
-
-                if ir.b_mode == POSTINC_A:
-                    self.get_instruction(pip).a_number += 1
-                    self.core_event(warrior, pip, EVENT_A_INC)
-                elif ir.b_mode == POSTINC_B:
-                    self.get_instruction(pip).b_number += 1
-                    self.core_event(warrior, pip, EVENT_B_INC)
-
-                # arithmetic common code
-                def do_arithmetic(op):
-                    try:
-                        # Pre-calculate common points and instructions
-                        target_point = Point2D(pc.x + wpb.x, pc.y + wpb.y)
-                        target_instruction = self.get_instruction(target_point)
-                        rpa_point = Point2D(pc.x + rpa.x, pc.y + rpa.y)
-                        rpb_point = Point2D(pc.x + rpb.x, pc.y + rpb.y)
-
-                        if ir.modifier == M_A:
-                            target_instruction.a_number = op(irb.a_number, ira.a_number)
-                            self.core_event(warrior, target_point, EVENT_A_WRITE)
-                            self.core_event(warrior, rpa_point, EVENT_A_READ)
-                            self.core_event(warrior, rpb_point, EVENT_A_READ)
-                        elif ir.modifier == M_B:
-                            target_instruction.b_number = op(irb.b_number, ira.b_number)
-                            self.core_event(warrior, target_point, EVENT_B_WRITE)
-                            self.core_event(warrior, rpa_point, EVENT_B_READ)
-                            self.core_event(warrior, rpb_point, EVENT_B_READ)
-                        elif ir.modifier == M_AB:
-                            target_instruction.b_number = op(irb.b_number, ira.a_number)
-                            self.core_event(warrior, target_point, EVENT_B_WRITE)
-                            self.core_event(warrior, rpa_point, EVENT_A_READ)
-                            self.core_event(warrior, rpb_point, EVENT_B_READ)
-                        elif ir.modifier == M_BA:
-                            target_instruction.a_number = op(irb.b_number, ira.a_number)
-                            self.core_event(warrior, target_point, EVENT_A_WRITE)
-                            self.core_event(warrior, rpa_point, EVENT_A_READ)
-                            self.core_event(warrior, rpb_point, EVENT_B_READ)
-                        elif ir.modifier == M_F or ir.modifier == M_I:
-                            target_instruction.a_number = op(irb.a_number, ira.a_number)
-                            target_instruction.b_number = op(irb.b_number, ira.b_number)
-                            self.core_event(warrior, target_point, EVENT_A_WRITE)
-                            self.core_event(warrior, target_point, EVENT_B_WRITE)
-                            self.core_event(warrior, rpa_point, EVENT_A_READ)
-                            self.core_event(warrior, rpb_point, EVENT_A_READ)
-                            self.core_event(warrior, rpa_point, EVENT_B_READ)
-                            self.core_event(warrior, rpb_point, EVENT_B_READ)
-                        elif ir.modifier == M_X:
-                            target_instruction.b_number = op(irb.b_number, ira.a_number)
-                            target_instruction.a_number = op(irb.a_number, ira.b_number)
-                            self.core_event(warrior, target_point, EVENT_A_WRITE)
-                            self.core_event(warrior, target_point, EVENT_B_WRITE)
-                            self.core_event(warrior, rpa_point, EVENT_A_READ)
-                            self.core_event(warrior, rpb_point, EVENT_A_READ)
-                            self.core_event(warrior, rpa_point, EVENT_B_READ)
-                            self.core_event(warrior, rpb_point, EVENT_B_READ)
-                        else:
-                            raise ValueError("Invalid modifier: %d" % ir.modifier)
-
-                        # enqueue next instruction
-                        self.enqueue(warrior, Point2D(pc.x + 1, pc.y))
-                    except ZeroDivisionError:
-                        pass
-
-                # comparison common code
-                def do_comparison(cmp):
-                    # Pre-calculate common points
-                    rpa_point = Point2D(pc.x + rpa.x, pc.y + rpa.y)
-                    rpb_point = Point2D(pc.x + rpb.x, pc.y + rpb.y)
-                    next_point = Point2D(pc.x + 1, pc.y)
-                    jump_point = Point2D(pc.x + 2, pc.y)
-
-                    if ir.modifier == M_A:
-                        result = cmp(ira.a_number, irb.a_number)
-                        self.enqueue(warrior, jump_point if result else next_point)
-                        self.core_event(warrior, rpa_point, EVENT_A_READ)
-                        self.core_event(warrior, rpb_point, EVENT_A_READ)
-                    elif ir.modifier == M_B:
-                        result = cmp(ira.b_number, irb.b_number)
-                        self.enqueue(warrior, jump_point if result else next_point)
-                        self.core_event(warrior, rpa_point, EVENT_B_READ)
-                        self.core_event(warrior, rpb_point, EVENT_B_READ)
-                    elif ir.modifier == M_AB:
-                        result = cmp(ira.a_number, irb.b_number)
-                        self.enqueue(warrior, jump_point if result else next_point)
-                        self.core_event(warrior, rpa_point, EVENT_A_READ)
-                        self.core_event(warrior, rpb_point, EVENT_B_READ)
-                    elif ir.modifier == M_BA:
-                        result = cmp(ira.b_number, irb.a_number)
-                        self.enqueue(warrior, jump_point if result else next_point)
-                        self.core_event(warrior, rpa_point, EVENT_B_READ)
-                        self.core_event(warrior, rpb_point, EVENT_A_READ)
-                    elif ir.modifier == M_F:
-                        result = cmp(ira.a_number, irb.a_number) and cmp(ira.b_number, irb.b_number)
-                        self.enqueue(warrior, jump_point if result else next_point)
-                        self.core_event(warrior, rpa_point, EVENT_A_READ)
-                        self.core_event(warrior, rpb_point, EVENT_A_READ)
-                        self.core_event(warrior, rpa_point, EVENT_B_READ)
-                        self.core_event(warrior, rpb_point, EVENT_B_READ)
-                    elif ir.modifier == M_X:
-                        result = cmp(ira.a_number, irb.b_number) and cmp(ira.b_number, irb.a_number)
-                        self.enqueue(warrior, jump_point if result else next_point)
-                        self.core_event(warrior, rpa_point, EVENT_A_READ)
-                        self.core_event(warrior, rpb_point, EVENT_A_READ)
-                        self.core_event(warrior, rpa_point, EVENT_B_READ)
-                        self.core_event(warrior, rpb_point, EVENT_B_READ)
-                    elif ir.modifier == M_I:
-                        result = ira == irb
-                        self.enqueue(warrior, jump_point if result else next_point)
-                        self.core_event(warrior, rpa_point, EVENT_I_READ)
-                        self.core_event(warrior, rpb_point, EVENT_I_READ)
-                    else:
-                        raise ValueError("Invalid modifier: %d" % ir.modifier)
+                self.handle_post_increment(pip_b, ir.b_mode, warrior)
 
                 self.core_event(warrior, pc, EVENT_EXECUTED)
+                self.execute_instruction(warrior, pc, ir, ira, irb, rpa, rpb, wpb)
 
-                # execute the instruction
-                if ir.opcode == DAT:
-                    # does not enqueue next instruction, therefore, killing the
-                    # process
-                    pass
-                elif ir.opcode == MOV:
-                    # Pre-calculate common points and instructions
-                    target_point = Point2D(pc.x + wpb.x, pc.y + wpb.y)
-                    target_instruction = self.get_instruction(target_point)
-                    rpa_point = Point2D(pc.x + rpa.x, pc.y + rpa.y)
+    def do_arithmetic(self, warrior, pc, ir, ira, irb, rpa, rpb, wpb, op):
+        """Execute arithmetic operations (ADD, SUB, MUL, DIV, MOD)."""
+        try:
+            # Pre-calculate common points and instructions
+            target_point = Point2D(pc.x + wpb.x, pc.y + wpb.y)
+            target_instruction = self.get_instruction(target_point)
+            rpa_point = Point2D(pc.x + rpa.x, pc.y + rpa.y)
+            rpb_point = Point2D(pc.x + rpb.x, pc.y + rpb.y)
 
-                    if ir.modifier == M_A:
-                        target_instruction.a_number = ira.a_number
-                        self.core_event(warrior, rpa_point, EVENT_A_READ)
-                        self.core_event(warrior, target_point, EVENT_A_WRITE)
-                    elif ir.modifier == M_B:
-                        target_instruction.b_number = ira.b_number
-                        self.core_event(warrior, rpa_point, EVENT_B_READ)
-                        self.core_event(warrior, target_point, EVENT_B_WRITE)
-                    elif ir.modifier == M_AB:
-                        target_instruction.b_number = ira.a_number
-                        self.core_event(warrior, rpa_point, EVENT_A_READ)
-                        self.core_event(warrior, target_point, EVENT_B_WRITE)
-                    elif ir.modifier == M_BA:
-                        target_instruction.a_number = ira.b_number
-                        self.core_event(warrior, rpa_point, EVENT_B_READ)
-                        self.core_event(warrior, target_point, EVENT_A_WRITE)
-                    elif ir.modifier == M_F:
-                        target_instruction.a_number = ira.a_number
-                        target_instruction.b_number = ira.b_number
-                        self.core_event(warrior, rpa_point, EVENT_A_READ)
-                        self.core_event(warrior, rpa_point, EVENT_B_READ)
-                        self.core_event(warrior, target_point, EVENT_A_WRITE)
-                        self.core_event(warrior, target_point, EVENT_B_WRITE)
-                    elif ir.modifier == M_X:
-                        target_instruction.b_number = ira.a_number
-                        target_instruction.a_number = ira.b_number
-                        self.core_event(warrior, rpa_point, EVENT_A_READ)
-                        self.core_event(warrior, rpa_point, EVENT_B_READ)
-                        self.core_event(warrior, target_point, EVENT_A_WRITE)
-                        self.core_event(warrior, target_point, EVENT_B_WRITE)
-                    elif ir.modifier == M_I:
-                        self.set_instruction(target_point, ira)
-                        self.core_event(warrior, rpa_point, EVENT_I_READ)
-                        self.core_event(warrior, target_point, EVENT_I_WRITE)
-                    else:
-                        raise ValueError("Invalid modifier: %d" % ir.modifier)
+            if ir.modifier == M_A:
+                target_instruction.a_number = op(irb.a_number, ira.a_number)
+                self.core_event(warrior, target_point, EVENT_A_WRITE)
+                self.core_event(warrior, rpa_point, EVENT_A_READ)
+                self.core_event(warrior, rpb_point, EVENT_A_READ)
+            elif ir.modifier == M_B:
+                target_instruction.b_number = op(irb.b_number, ira.b_number)
+                self.core_event(warrior, target_point, EVENT_B_WRITE)
+                self.core_event(warrior, rpa_point, EVENT_B_READ)
+                self.core_event(warrior, rpb_point, EVENT_B_READ)
+            elif ir.modifier == M_AB:
+                target_instruction.b_number = op(irb.b_number, ira.a_number)
+                self.core_event(warrior, target_point, EVENT_B_WRITE)
+                self.core_event(warrior, rpa_point, EVENT_A_READ)
+                self.core_event(warrior, rpb_point, EVENT_B_READ)
+            elif ir.modifier == M_BA:
+                target_instruction.a_number = op(irb.b_number, ira.a_number)
+                self.core_event(warrior, target_point, EVENT_A_WRITE)
+                self.core_event(warrior, rpa_point, EVENT_A_READ)
+                self.core_event(warrior, rpb_point, EVENT_B_READ)
+            elif ir.modifier == M_F or ir.modifier == M_I:
+                target_instruction.a_number = op(irb.a_number, ira.a_number)
+                target_instruction.b_number = op(irb.b_number, ira.b_number)
+                self.core_event(warrior, target_point, EVENT_A_WRITE)
+                self.core_event(warrior, target_point, EVENT_B_WRITE)
+                self.core_event(warrior, rpa_point, EVENT_A_READ)
+                self.core_event(warrior, rpb_point, EVENT_A_READ)
+                self.core_event(warrior, rpa_point, EVENT_B_READ)
+                self.core_event(warrior, rpb_point, EVENT_B_READ)
+            elif ir.modifier == M_X:
+                target_instruction.b_number = op(irb.b_number, ira.a_number)
+                target_instruction.a_number = op(irb.a_number, ira.b_number)
+                self.core_event(warrior, target_point, EVENT_A_WRITE)
+                self.core_event(warrior, target_point, EVENT_B_WRITE)
+                self.core_event(warrior, rpa_point, EVENT_A_READ)
+                self.core_event(warrior, rpb_point, EVENT_A_READ)
+                self.core_event(warrior, rpa_point, EVENT_B_READ)
+                self.core_event(warrior, rpb_point, EVENT_B_READ)
+            else:
+                raise ValueError("Invalid modifier: %d" % ir.modifier)
 
-                    # enqueue next instruction
-                    self.enqueue(warrior, Point2D(pc.x + 1, pc.y))
-                elif ir.opcode == ADD:
-                    do_arithmetic(operator.add)
-                elif ir.opcode == SUB:
-                    do_arithmetic(operator.sub)
-                elif ir.opcode == MUL:
-                    do_arithmetic(operator.mul)
-                elif ir.opcode == DIV:
-                    do_arithmetic(operator.truediv)
-                elif ir.opcode == MOD:
-                    do_arithmetic(operator.mod)
-                elif ir.opcode == JMP:
-                    self.enqueue(warrior, Point2D(pc.x + rpa.x, pc.y + rpa.y))
-                elif ir.opcode == JMZ:
-                    if ir.modifier == M_A or ir.modifier == M_BA:
-                        self.enqueue(warrior, Point2D(pc.x + (rpa.x if irb.a_number == 0 else 1), pc.y))
-                        self.core_event(warrior, Point2D(pc.x + rpa.x, pc.y + rpa.y), EVENT_A_READ)
-                    elif ir.modifier == M_B or ir.modifier == M_AB:
-                        self.enqueue(warrior, Point2D(pc.x + (rpa.x if irb.b_number == 0 else 1), pc.y))
-                        self.core_event(warrior, Point2D(pc.x + rpa.x, pc.y + rpa.y), EVENT_B_READ)
-                    elif ir.modifier in (M_F, M_X, M_I):
-                        self.enqueue(warrior,
-                                      Point2D(pc.x + (rpa.x if irb.a_number == irb.b_number == 0 else 1), pc.y))
-                        self.core_event(warrior, Point2D(pc.x + rpa.x, pc.y + rpa.y), EVENT_A_READ)
-                        self.core_event(warrior, Point2D(pc.x + rpa.x, pc.y + rpa.y), EVENT_B_READ)
-                    else:
-                        raise ValueError("Invalid modifier: %d" % ir.modifier)
-                elif ir.opcode == JMN:
-                    if ir.modifier == M_A or ir.modifier == M_BA:
-                        self.enqueue(warrior, Point2D(pc.x + (rpa.x if irb.a_number != 0 else 1), pc.y))
-                        self.core_event(warrior, Point2D(pc.x + rpa.x, pc.y + rpa.y), EVENT_A_READ)
-                    elif ir.modifier == M_B or ir.modifier == M_AB:
-                        self.enqueue(warrior, Point2D(pc.x + (rpa.x if irb.b_number != 0 else 1), pc.y))
-                        self.core_event(warrior, Point2D(pc.x + rpa.x, pc.y + rpa.y), EVENT_B_READ)
-                    elif ir.modifier in (M_F, M_X, M_I):
-                        self.enqueue(warrior,
-                                      Point2D(pc.x + (rpa.x if irb.a_number != 0 or
-                                                   irb.b_number != 0 else 1), pc.y))
-                        self.core_event(warrior, Point2D(pc.x + rpa.x, pc.y + rpa.y), EVENT_A_READ)
-                        self.core_event(warrior, Point2D(pc.x + rpa.x, pc.y + rpa.y), EVENT_B_READ)
-                    else:
-                        raise ValueError("Invalid modifier: %d" % ir.modifier)
-                elif ir.opcode == DJN:
-                    if ir.modifier == M_A or ir.modifier == M_BA:
-                        self.get_instruction(Point2D(pc.x + wpb.x, pc.y + wpb.y)).a_number -= 1
-                        irb.a_number -= 1
-                        self.enqueue(warrior, Point2D(pc.x + (rpa.x if irb.a_number != 0 else 1), pc.y))
-                        self.core_event(warrior, Point2D(pc.x + rpa.x, pc.y + rpa.y), EVENT_A_READ)
-                        self.core_event(warrior, Point2D(pc.x + rpa.x, pc.y + rpa.y), EVENT_A_DEC)
-                    elif ir.modifier == M_B or ir.modifier == M_AB:
-                        self.get_instruction(Point2D(pc.x + wpb.x, pc.y + wpb.y)).b_number -= 1
-                        irb.b_number -= 1
-                        self.enqueue(warrior, Point2D(pc.x + (rpa.x if irb.b_number != 0 else 1), pc.y))
-                        self.core_event(warrior, Point2D(pc.x + rpa.x, pc.y + rpa.y), EVENT_B_READ)
-                        self.core_event(warrior, Point2D(pc.x + rpa.x, pc.y + rpa.y), EVENT_B_DEC)
-                    elif ir.modifier in (M_F, M_X, M_I):
-                        self.get_instruction(Point2D(pc.x + wpb.x, pc.y + wpb.y)).a_number -= 1
-                        irb.a_number -= 1
-                        self.get_instruction(Point2D(pc.x + wpb.x, pc.y + wpb.y)).b_number -= 1
-                        irb.b_number -= 1
-                        self.enqueue(warrior,
-                                      Point2D(pc.x + (rpa.x if irb.a_number != 0 or
-                                                   irb.b_number != 0 else 1), pc.y))
-                        self.core_event(warrior, Point2D(pc.x + rpa.x, pc.y + rpa.y), EVENT_A_READ)
-                        self.core_event(warrior, Point2D(pc.x + rpa.x, pc.y + rpa.y), EVENT_B_READ)
-                        self.core_event(warrior, Point2D(pc.x + rpa.x, pc.y + rpa.y), EVENT_A_DEC)
-                        self.core_event(warrior, Point2D(pc.x + rpa.x, pc.y + rpa.y), EVENT_B_DEC)
-                    else:
-                        raise ValueError("Invalid modifier: %d" % ir.modifier)
-                elif ir.opcode == SPL:
-                    self.enqueue(warrior, Point2D(pc.x + 1, pc.y))
-                    self.enqueue(warrior, Point2D(pc.x + rpa.x, pc.y + rpa.y))
-                elif ir.opcode == SLT:
-                    do_comparison(operator.lt)
-                elif ir.opcode == CMP or ir.opcode == SEQ:
-                    do_comparison(operator.eq)
-                elif ir.opcode == SNE:
-                    do_comparison(operator.ne)
-                elif ir.opcode == NOP:
-                    self.enqueue(warrior, Point2D(pc.x + 1, pc.y))
-                else:
-                    raise ValueError("Invalid opcode: %d" % ir.opcode)
+            # enqueue next instruction
+            self.enqueue(warrior, Point2D(pc.x + 1, pc.y))
+        except ZeroDivisionError:
+            pass
+
+    def do_comparison(self, warrior, pc, ir, ira, irb, rpa, rpb, cmp):
+        """Execute comparison operations (SLT, CMP/SEQ, SNE)."""
+        # Pre-calculate common points
+        rpa_point = Point2D(pc.x + rpa.x, pc.y + rpa.y)
+        rpb_point = Point2D(pc.x + rpb.x, pc.y + rpb.y)
+        next_point = Point2D(pc.x + 1, pc.y)
+        jump_point = Point2D(pc.x + 2, pc.y)
+
+        if ir.modifier == M_A:
+            result = cmp(ira.a_number, irb.a_number)
+            self.enqueue(warrior, jump_point if result else next_point)
+            self.core_event(warrior, rpa_point, EVENT_A_READ)
+            self.core_event(warrior, rpb_point, EVENT_A_READ)
+        elif ir.modifier == M_B:
+            result = cmp(ira.b_number, irb.b_number)
+            self.enqueue(warrior, jump_point if result else next_point)
+            self.core_event(warrior, rpa_point, EVENT_B_READ)
+            self.core_event(warrior, rpb_point, EVENT_B_READ)
+        elif ir.modifier == M_AB:
+            result = cmp(ira.a_number, irb.b_number)
+            self.enqueue(warrior, jump_point if result else next_point)
+            self.core_event(warrior, rpa_point, EVENT_A_READ)
+            self.core_event(warrior, rpb_point, EVENT_B_READ)
+        elif ir.modifier == M_BA:
+            result = cmp(ira.b_number, irb.a_number)
+            self.enqueue(warrior, jump_point if result else next_point)
+            self.core_event(warrior, rpa_point, EVENT_B_READ)
+            self.core_event(warrior, rpb_point, EVENT_A_READ)
+        elif ir.modifier == M_F:
+            result = cmp(ira.a_number, irb.a_number) and cmp(ira.b_number, irb.b_number)
+            self.enqueue(warrior, jump_point if result else next_point)
+            self.core_event(warrior, rpa_point, EVENT_A_READ)
+            self.core_event(warrior, rpb_point, EVENT_A_READ)
+            self.core_event(warrior, rpa_point, EVENT_B_READ)
+            self.core_event(warrior, rpb_point, EVENT_B_READ)
+        elif ir.modifier == M_X:
+            result = cmp(ira.a_number, irb.b_number) and cmp(ira.b_number, irb.a_number)
+            self.enqueue(warrior, jump_point if result else next_point)
+            self.core_event(warrior, rpa_point, EVENT_A_READ)
+            self.core_event(warrior, rpb_point, EVENT_A_READ)
+            self.core_event(warrior, rpa_point, EVENT_B_READ)
+            self.core_event(warrior, rpb_point, EVENT_B_READ)
+        elif ir.modifier == M_I:
+            result = ira == irb
+            self.enqueue(warrior, jump_point if result else next_point)
+            self.core_event(warrior, rpa_point, EVENT_I_READ)
+            self.core_event(warrior, rpb_point, EVENT_I_READ)
+        else:
+            raise ValueError("Invalid modifier: %d" % ir.modifier)
 
 if __name__ == "__main__":
     import argparse
