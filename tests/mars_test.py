@@ -65,10 +65,9 @@ class TestMars(unittest.TestCase):
 
         for i in range(8000):
             simulation.step()
+            
             if not validate.task_queue:
-                flag = validate.labels["flag"]
-                flagins = validate.instructions[flag]
-                self.fail("Interpreter is not ICWS88-compliant. died in %d steps at %s" % (i, flagins))
+                self.fail("Interpreter is not ICWS88-compliant. died in %d steps" % (i, ))
 
     def test_crazy_warrrior(self):
         self.warrior_step_by_step("crazy.red", "crazy-steps.red", -22, 22)

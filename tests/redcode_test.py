@@ -30,11 +30,11 @@ class TestRedcodeAssembler(unittest.TestCase):
         self.assertEqual('A. K. Dewdney', warrior.author)
         self.assertEqual(3, len(warrior))
 
-        self.assertEqual(Instruction(ADD, M_AB, IMMEDIATE, 2004, DIRECT, 1),
+        self.assertEqual(Instruction(ADD, M_AB, None, IMMEDIATE, 2004, DIRECT, 1),
                           warrior.instructions[0])
-        self.assertEqual(Instruction(MOV, M_I, DIRECT, 2, DIRECT, 2),
+        self.assertEqual(Instruction(MOV, M_I, None, DIRECT, 2, DIRECT, 2),
                           warrior.instructions[1])
-        self.assertEqual(Instruction(JMP, M_F, DIRECT, -2, DIRECT, 0),
+        self.assertEqual(Instruction(JMP, M_F, None, DIRECT, -2, DIRECT, 0),
                           warrior.instructions[2])
 
 if __name__ == '__main__':

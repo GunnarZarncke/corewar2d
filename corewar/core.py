@@ -6,7 +6,7 @@ from redcode import Instruction, Point2D
 
 __all__ = ['DEFAULT_INITIAL_INSTRUCTION', 'Core', 'Point2D']
 
-DEFAULT_INITIAL_INSTRUCTION = Instruction('DAT', 'F', '$', 0, '$', 0)
+DEFAULT_INITIAL_INSTRUCTION = Instruction('DAT', 'F', 'D', '$', 0, '$', 0)
 
 
 class Core(object):

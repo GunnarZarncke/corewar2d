@@ -53,6 +53,19 @@ M_X = 5
 # Instructions read and write entire instructions.
 M_I = 6
 
+# Stepping modifiers
+STEP_NORMAL = 0  # PC+1 (default)
+STEP_VERTICAL = 1  # PC+(0:1)
+STEP_BACKWARD = 2  # PC-1
+STEP_VERTICAL_BACKWARD = 3  # PC-(0:1)
+
+STEP_MODIFIERS = {
+    'D': STEP_NORMAL,
+    'S': STEP_VERTICAL,
+    'Q': STEP_BACKWARD,
+    'W': STEP_VERTICAL_BACKWARD
+}
+
 IMMEDIATE = 0   # immediate
 DIRECT = 1      # direct
 INDIRECT_B = 2  # indirect using B-field
@@ -64,6 +77,7 @@ POSTINC_A = 7   # postincrement indirect using A-field
 
 INSTRUCTION_REGEX = re.compile(r'([a-z]{3})'  # opcode
                                r'(?:\s*\.\s*([abfxi]{1,2}))?' # optional modifier
+                               r'(?:\s*\.\s*([wqsd]))?' # optional stepping modifier
                                r'(?:\s*([#\$\*@\{<\}>])?\s*([^,$]+))?' # optional first value
                                r'(?:\s*,\s*([#\$\*@\{<\}>])?\s*(.+))?$', # optional second value
                                re.I)
@@ -105,7 +119,18 @@ DEFAULT_MODIFIERS = dict((tuple(OPCODES[opcode] for opcode in opcodes),
 
 class Point2D:
     def __init__(self, x, y=0):
-        if isinstance(x, Point2D):
+        if isinstance(x, str):
+            if ':' in x:
+                if y:
+                    raise ValueError("Cannot provide both a string and a y value")
+                x, y = map(int, x.split(':'))
+            else:
+                x = int(x)
+                y = int(y)
+
+            self.x = x
+            self.y = y
+        elif isinstance(x, Point2D):
             self.x = x.x
             self.y = x.y
         else:
@@ -115,7 +140,7 @@ class Point2D:
     def __str__(self):
         if self.y == 0:
             return str(self.x)
-        return f"{self.x};{self.y}"
+        return f"{self.x}:{self.y}"
 
     def __eq__(self, other):
         if isinstance(other, Point2D):
@@ -182,7 +207,7 @@ class Point2D:
         return hash((self.x, self.y))
 
     def __repr__(self):
-        return f"{self.x};{self.y}"
+        return f"{self.x}:{self.y}"
     
 class Warrior(object):
     "An encapsulation of a Redcode Warrior, with instructions and meta-data"
@@ -209,10 +234,15 @@ class Warrior(object):
 class Instruction(object):
     "An encapsulation of a Redcode instruction."
 
-    def __init__(self, opcode, modifier=None, a_mode=None, a_number=0,
+    def __init__(self, opcode, modifier=None, stepping=None, a_mode=None, a_number=0,
                  b_mode=None, b_number=0):
         self.opcode = OPCODES[opcode.upper()] if isinstance(opcode, str) else opcode
         self.modifier = MODIFIERS[modifier.upper()] if isinstance(modifier, str) else modifier
+        # Only convert stepping to uppercase if it's a string and not a mode character
+        if isinstance(stepping, str) and stepping not in MODES:
+            self.stepping = STEP_MODIFIERS[stepping.upper()]
+        else:
+            self.stepping = STEP_NORMAL if stepping is None else stepping
         if a_mode is not None:
             self.a_mode = MODES[a_mode] if isinstance(a_mode, str) else a_mode
         else:
@@ -264,8 +294,8 @@ class Instruction(object):
             return self._a_number
         if isinstance(self._a_number, Point2D):
             return self._a_number
-        if isinstance(self._a_number, str) and ';' in self._a_number:
-            x, y = map(int, self._a_number.split(';'))
+        if isinstance(self._a_number, str) and ':' in self._a_number:
+            x, y = map(int, self._a_number.split(':'))
             return Point2D(x, y)
         return Point2D(int(self._a_number) if self._a_number else 0)
 
@@ -273,8 +303,8 @@ class Instruction(object):
     def a_number(self, value):
         if isinstance(value, Point2D):
             self._a_number = value
-        elif isinstance(value, str) and ';' in value:
-            x, y = map(int, value.split(';'))
+        elif isinstance(value, str) and ':' in value:
+            x, y = map(int, value.split(':'))
             self._a_number = Point2D(x, y)
         else:
             self._a_number = Point2D(int(value) if value else 0)
@@ -285,8 +315,8 @@ class Instruction(object):
             return self._b_number
         if isinstance(self._b_number, Point2D):
             return self._b_number
-        if isinstance(self._b_number, str) and ';' in self._b_number:
-            x, y = map(int, self._b_number.split(';'))
+        if isinstance(self._b_number, str) and ':' in self._b_number:
+            x, y = map(int, self._b_number.split(':'))
             return Point2D(x, y)
         return Point2D(int(self._b_number) if self._b_number else 0)
 
@@ -294,8 +324,8 @@ class Instruction(object):
     def b_number(self, value):
         if isinstance(value, Point2D):
             self._b_number = value
-        elif isinstance(value, str) and ';' in value:
-            x, y = map(int, value.split(';'))
+        elif isinstance(value, str) and ':' in value:
+            x, y = map(int, value.split(':'))
             self._b_number = Point2D(x, y)
         else:
             self._b_number = Point2D(int(value) if value else 0)
@@ -312,11 +342,15 @@ class Instruction(object):
         # inverse lookup the instruction values
         opcode_str = {v: k for k, v in OPCODES.items() if k.isupper() and isinstance(v, int)}.get(self.opcode, 'UNKNOWN')
         modifier_str = {v: k for k, v in MODIFIERS.items()}.get(self.modifier, str(self.modifier))
+        stepping_str = {v: k for k, v in STEP_MODIFIERS.items()}.get(self.stepping, '')
         a_mode_str = next(key for key,value in MODES.items() if value==self.a_mode)
         b_mode_str = next(key for key,value in MODES.items() if value==self.b_mode)
 
-        return "%s.%s %s %s, %s %s" % (opcode_str,
+        # Only show stepping modifier if it's not the default (D)
+        stepping_suffix = f".{stepping_str}" if stepping_str and stepping_str != 'D' else "  "
+        return "%s.%s%s %s %s, %s %s" % (opcode_str,
                                        modifier_str.ljust(2),
+                                       stepping_suffix,
                                        a_mode_str,
                                        str(self.a_number),
                                        b_mode_str,
@@ -441,14 +475,15 @@ def parse(input, definitions={}):
                 raise ValueError('Error at line %d: expected instruction in expression: "%s"' %
                                  (n, line))
             else:
-                opcode, modifier, a_mode, a_number, b_mode, b_number = m.groups()
-                #print("DEBUG: Parsed instruction components:")
-                #print(f"  opcode: {opcode}")
-                #print(f"  modifier: {modifier}")
-                #print(f"  a_mode: {a_mode}")
-                #print(f"  a_number: {a_number}")
-                #print(f"  b_mode: {b_mode}")
-                #print(f"  b_number: {b_number}")
+                opcode, modifier, stepping, a_mode, a_number, b_mode, b_number = m.groups()
+                print("DEBUG: Parsed instruction components:")
+                print(f"  opcode: {opcode}")
+                print(f"  modifier: {modifier}")
+                print(f"  stepping: {stepping}")
+                print(f"  a_mode: {a_mode}")
+                print(f"  a_number: {a_number}")
+                print(f"  b_mode: {b_mode}")
+                print(f"  b_number: {b_number}")
 
                 if opcode.upper() not in OPCODES:
                     raise ValueError('Invalid opcode: %s in line %d: "%s"' %
@@ -456,10 +491,24 @@ def parse(input, definitions={}):
                 if modifier is not None and modifier.upper() not in MODIFIERS:
                     raise ValueError('Invalid modifier: %s in line %d: "%s"' %
                                      (modifier, n, line))
+                if stepping is not None and stepping.upper() not in STEP_MODIFIERS:
+                    raise ValueError('Invalid stepping modifier: %s in line %d: "%s"' %
+                                     (stepping, n, line))
+
+                # Parse Point2D values if present
+                try:
+                    a_number = Point2D(a_number)
+                except:
+                    pass
+                
+                try:
+                    b_number = Point2D(b_number)
+                except:
+                    pass
 
                 # add parts of instruction read. the fields should be parsed
                 # as an expression in the second pass, to expand labels
-                warrior.instructions.append(Instruction(opcode, modifier,
+                warrior.instructions.append(Instruction(opcode, modifier, stepping,
                                                         a_mode, a_number,
                                                         b_mode, b_number))
 
