@@ -128,7 +128,7 @@ class PygameMARS(MARS):
             raise ValueError("address must be a Point2D")
             
         # Ensure address is within bounds
-        address = self.core.trim(address)
+        address = self.core.point_to_grid(address)
         
         # Calculate position for drawing
         position = ((address.x % INSTRUCTIONS_PER_LINE) * INSTRUCTION_SIZE_X,
@@ -319,7 +319,7 @@ if __name__ == "__main__":
             step = False
             while True:
                 for event in pygame.event.get():
-                    print("Event:"+str(event))
+                    #print("Event:"+str(event))
                     if event.type == QUIT:
                         # Tie all remaining bots and go to final results
                         next_round = True

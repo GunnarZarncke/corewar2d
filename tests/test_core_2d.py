@@ -1,5 +1,5 @@
 import pytest
-from corewar.core import Core, Point2D
+from core import Core, Point2D
 
 def test_point_to_index_basic():
     """Test basic 2D to 1D conversion"""
@@ -82,24 +82,13 @@ def test_point_to_index_invalid_width():
         Core(size=100, width=7)  # 100 not divisible by 7 
 
 
-def test_trim():
+def test_point_to_grid():
     core = Core(size=6, width=3)
     
     # Test trim with positive values
-    assert core.trim(Point2D(3, 0)) == Point2D(0, 1)  # Wraps to next row
-    assert core.trim(Point2D(0, 2)) == Point2D(1, 0)  # Wraps to start
+    assert core.point_to_grid(Point2D(3, 0)) == Point2D(0, 1)  # Wraps to next row
+    assert core.point_to_grid(Point2D(0, 2)) == Point2D(1, 0)  # Wraps to start
     
     # Test trim with negative values
-    assert core.trim(Point2D(-1, 0)) == Point2D(2, 1)  # Wraps to previous row
-    assert core.trim(Point2D(0, -1)) == Point2D(2, 1)  # Wraps to previous column
-
-def test_trim_signed():
-    core = Core(size=6, width=3)
-    
-    # Test within bounds
-    assert core.trim_signed(Point2D(1, 1)) == Point2D(1, 1)
-    assert core.trim_signed(Point2D(-1, -1)) == Point2D(1, 0)
-    
-    # Test out of bounds
-    assert core.trim_signed(Point2D(3, 0)) == Point2D(0, 1)  # Wraps to next row
-    assert core.trim_signed(Point2D(0, 2)) == Point2D(1, 0)  # Wraps to start
+    assert core.point_to_grid(Point2D(-1, 0)) == Point2D(2, 1)  # Wraps to previous row
+    assert core.point_to_grid(Point2D(0, -1)) == Point2D(2, 1)  # Wraps to previous column

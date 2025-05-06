@@ -1,5 +1,5 @@
 import unittest
-from corewar.redcode import Point2D, Instruction, MOV, M_F, DIRECT
+from redcode import Point2D, Instruction, MOV, M_F, DIRECT
 
 class TestPoint2D(unittest.TestCase):
     def test_backward_compatibility(self):

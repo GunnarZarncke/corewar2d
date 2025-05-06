@@ -53,6 +53,17 @@ class MARS(object):
 
     def set_instruction(self, point, instruction):
         """Set instruction at Point2D coordinates."""
+        # Validate and normalize the instruction's values
+        if not isinstance(instruction.a_number, Point2D):
+            print(f"a_number type: {type(instruction.a_number)}, value: {instruction.a_number}")
+            raise ValueError(f"a_number must be a Point2D, got {type(instruction.a_number)}, {Point2D.__module__}")
+        if not isinstance(instruction.b_number, Point2D):
+            print(f"b_number type: {type(instruction.b_number)}, value: {instruction.b_number}")
+            raise ValueError(f"b_number must be a Point2D, got {type(instruction.b_number)}, {Point2D.__module__}")
+        
+        #instruction.a_number = self.core.normalize_point(instruction.a_number)
+        #instruction.b_number = self.core.normalize_point(instruction.b_number)
+        
         self.core[point] = instruction
 
     def core_event(self, warrior, address : Point2D, event_type):
@@ -104,7 +115,7 @@ class MARS(object):
         """
         if len(warrior.task_queue) < self.max_processes:
             if not isinstance(point, Point2D):
-                point = Point2D(point)
+                raise ValueError(f"point must be a Point2D, got {type(point)}")
             # Handle negative addresses by wrapping them to positive
             point = self.core.trim(point)
             warrior.task_queue.append(point)
@@ -197,6 +208,10 @@ class MARS(object):
             self.enqueue(warrior, Point2D(pc.x + 1, pc.y))
         else:
             raise ValueError("Invalid opcode: %d" % ir.opcode)
+
+    def normalize(self, number):
+        """Normalize a number to the core size."""
+        return number #% self.core.size
 
     def execute_mov(self, warrior, pc, ir, ira, rpa, wpb):
         """Execute a MOV instruction."""
@@ -317,6 +332,7 @@ class MARS(object):
                 # The process counter is the next instruction-address in the
                 # warrior's task queue
                 pc = warrior.task_queue.pop(0)
+                print(f"pc: {pc}")
                 if not isinstance(pc, Point2D):
                     raise ValueError("Invalid process counter: %s" % pc)
 
@@ -346,28 +362,28 @@ class MARS(object):
             rpb_point = Point2D(pc.x + rpb.x, pc.y + rpb.y)
 
             if ir.modifier == M_A:
-                target_instruction.a_number = op(irb.a_number, ira.a_number)
+                target_instruction.a_number = self.normalize(op(irb.a_number, ira.a_number))
                 self.core_event(warrior, target_point, EVENT_A_WRITE)
                 self.core_event(warrior, rpa_point, EVENT_A_READ)
                 self.core_event(warrior, rpb_point, EVENT_A_READ)
             elif ir.modifier == M_B:
-                target_instruction.b_number = op(irb.b_number, ira.b_number)
+                target_instruction.b_number = self.normalize(op(irb.b_number, ira.b_number))
                 self.core_event(warrior, target_point, EVENT_B_WRITE)
                 self.core_event(warrior, rpa_point, EVENT_B_READ)
                 self.core_event(warrior, rpb_point, EVENT_B_READ)
             elif ir.modifier == M_AB:
-                target_instruction.b_number = op(irb.b_number, ira.a_number)
+                target_instruction.b_number = self.normalize(op(irb.b_number, ira.a_number))
                 self.core_event(warrior, target_point, EVENT_B_WRITE)
                 self.core_event(warrior, rpa_point, EVENT_A_READ)
                 self.core_event(warrior, rpb_point, EVENT_B_READ)
             elif ir.modifier == M_BA:
-                target_instruction.a_number = op(irb.b_number, ira.a_number)
+                target_instruction.a_number = self.normalize(op(irb.b_number, ira.a_number))
                 self.core_event(warrior, target_point, EVENT_A_WRITE)
                 self.core_event(warrior, rpa_point, EVENT_A_READ)
                 self.core_event(warrior, rpb_point, EVENT_B_READ)
             elif ir.modifier == M_F or ir.modifier == M_I:
-                target_instruction.a_number = op(irb.a_number, ira.a_number)
-                target_instruction.b_number = op(irb.b_number, ira.b_number)
+                target_instruction.a_number = self.normalize(op(irb.a_number, ira.a_number))
+                target_instruction.b_number = self.normalize(op(irb.b_number, ira.b_number))
                 self.core_event(warrior, target_point, EVENT_A_WRITE)
                 self.core_event(warrior, target_point, EVENT_B_WRITE)
                 self.core_event(warrior, rpa_point, EVENT_A_READ)
@@ -375,8 +391,8 @@ class MARS(object):
                 self.core_event(warrior, rpa_point, EVENT_B_READ)
                 self.core_event(warrior, rpb_point, EVENT_B_READ)
             elif ir.modifier == M_X:
-                target_instruction.b_number = op(irb.b_number, ira.a_number)
-                target_instruction.a_number = op(irb.a_number, ira.b_number)
+                target_instruction.b_number = self.normalize(op(irb.b_number, ira.a_number))
+                target_instruction.a_number = self.normalize(op(irb.a_number, ira.b_number))
                 self.core_event(warrior, target_point, EVENT_A_WRITE)
                 self.core_event(warrior, target_point, EVENT_B_WRITE)
                 self.core_event(warrior, rpa_point, EVENT_A_READ)

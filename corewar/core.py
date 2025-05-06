@@ -30,17 +30,18 @@ class Core(object):
         """
         self.instructions = [instruction.core_binded(self) for i in range(self.size)]
 
-    def point_to_index(self, point):
-        """Convert a Point2D to a memory index, handling 2D wrapping."""
+    def normalize_point(self, point):
+        """Normalize a point's coordinates to be within the core's size on each axis. This ensures arithmetic compliant to ICWS"""
         if not isinstance(point, Point2D):
             import traceback
             traceback.print_stack()
             raise ValueError("Point2D expected, got %s" % type(point))
+        if point.x != point.x % self.size or point.y != point.y % self.size:
+            print(f"normalize_point: {point} -> {Point2D(point.x % self.size, point.y % self.size)}")
+        return Point2D(point.x % self.size, point.y % self.size)
             
-        ## For 1D addressing (y=0), just wrap x around the core size
-        #if point.y == 0:
-        #    return point.x % self.size
-            
+    def point_to_grid(self, point):
+        """Convert a Point2D to 2D grid range, handling 2D wrapping."""
         # For 2D addressing, handle both x and y wrapping
         round_x = point.x // self.width    # how many times you wrapped in x
         x_new  = point.x % self.width
@@ -50,50 +51,22 @@ class Core(object):
         final_y = raw_y % self.height
 
         final_x = (x_new + round_y) % self.width
-        return final_y * self.width + final_x
+        #print(f"point_to_grid: {point} -> {Point2D(final_x, final_y)}")
+        return Point2D(final_x, final_y)
 
-    def trim_write(self, address):
-        "Return the trimmed address to write, considering the write limit."
-        return self._trim(address, self.write_limit)
-
-    def trim_read(self, address):
-        "Return the trimmed address to read, considering the read limit."
-        return self._trim(address, self.read_limit)
+    def point_to_index(self, point):
+        if not isinstance(point, Point2D):
+            import traceback
+            traceback.print_stack()
+            raise ValueError("Point2D expected, got %s" % type(point))
+            
+        ongrid = self.point_to_grid(point)
+        return ongrid.y * self.width + ongrid.x
 
     def trim(self, value):
         "Return a trimmed value to the bounds of the core size"
-        # For 1D addressing (y=0), just wrap x around the core size
-        #if value.y == 0:
-        #    return Point2D(value.x % self.size, 0)
-            
-        # For 2D addressing, handle both x and y wrapping
-        round_x = value.x // self.width   # how many times you wrapped in x
-        x_new  = value.x % self.width
-
-        raw_y = value.y + round_x
-        round_y = value.y // self.height # how many times you wrapped in y
-        final_y = raw_y % self.height
-
-        final_x = (x_new + round_y) % self.width
-        return Point2D(final_x, final_y)
-
-    def trim_signed(self, value):
-        "Return a trimmed value to the bounds of -core size to +core size"
-        # For 1D addressing (y=0), just wrap x around the core size
-        #if value.y == 0:
-        #    return Point2D(value.x % self.size, 0)
-            
-        # For 2D addressing, handle both x and y wrapping
-        round_x = value.x // self.width   # how many times you wrapped in x
-        x_new  = value.x % self.width
-
-        raw_y = value.y + round_x
-        round_y = value.y // self.height # how many times you wrapped in y
-        final_y = raw_y % self.height
-
-        final_x = (x_new + round_y) % self.width
-        return Point2D(final_x, final_y)
-
+        return self.normalize_point(value)
+    
     def __getitem__(self, key):
         if isinstance(key, slice):
             start, stop = key.start, key.stop
@@ -105,6 +78,7 @@ class Core(object):
             return self.instructions[self.point_to_index(key)]
 
     def __setitem__(self, address, instruction):
+        print(f"set: {address} [{self.point_to_index(address)}] = {instruction}")
         self.instructions[self.point_to_index(address)] = instruction
 
     def __iter__(self):

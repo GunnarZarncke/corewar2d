@@ -181,6 +181,9 @@ class Point2D:
     def __hash__(self):
         return hash((self.x, self.y))
 
+    def __repr__(self):
+        return f"{self.x};{self.y}"
+    
 class Warrior(object):
     "An encapsulation of a Redcode Warrior, with instructions and meta-data"
 
@@ -237,6 +240,14 @@ class Instruction(object):
         instruction = copy(self)
         instruction.core = core
         return instruction
+
+    def normalize(self, size: int):
+        if isinstance(self.a_number, Point2D):
+            self.a_number.x %= size
+            self.a_number.y %= size
+        if isinstance(self.b_number, Point2D):
+            self.b_number.x %= size
+            self.b_number.y %= size
 
     def default_modifier(self):
         for opcodes, modes_modifiers in DEFAULT_MODIFIERS.items():
@@ -431,13 +442,13 @@ def parse(input, definitions={}):
                                  (n, line))
             else:
                 opcode, modifier, a_mode, a_number, b_mode, b_number = m.groups()
-                print("DEBUG: Parsed instruction components:")
-                print(f"  opcode: {opcode}")
-                print(f"  modifier: {modifier}")
-                print(f"  a_mode: {a_mode}")
-                print(f"  a_number: {a_number}")
-                print(f"  b_mode: {b_mode}")
-                print(f"  b_number: {b_number}")
+                #print("DEBUG: Parsed instruction components:")
+                #print(f"  opcode: {opcode}")
+                #print(f"  modifier: {modifier}")
+                #print(f"  a_mode: {a_mode}")
+                #print(f"  a_number: {a_number}")
+                #print(f"  b_mode: {b_mode}")
+                #print(f"  b_number: {b_number}")
 
                 if opcode.upper() not in OPCODES:
                     raise ValueError('Invalid opcode: %s in line %d: "%s"' %
@@ -475,6 +486,9 @@ def parse(input, definitions={}):
             instruction.a_number = eval(instruction.a_number, environment, relative_labels)
         if isinstance(instruction.b_number, str):
             instruction.b_number = eval(instruction.b_number, environment, relative_labels)
+
+    warrior.labels = labels
+    warrior.environment = environment
 
     return warrior
 

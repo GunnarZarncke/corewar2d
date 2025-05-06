@@ -7,10 +7,12 @@ import sys
 import unittest
 
 # Add both the project root and corewar directories to the Python path
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+#sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'corewar')))
 
-from corewar import redcode, mars
+#rom corewar import redcode, mars
+import redcode
+import mars
 
 DEFAULT_ENV = {'CORESIZE': 8000, 'MAXLENGTH': 100}
 
@@ -64,7 +66,9 @@ class TestMars(unittest.TestCase):
         for i in range(8000):
             simulation.step()
             if not validate.task_queue:
-                self.fail("Interpreter is not ICWS88-compliant. died in %d steps" % i)
+                flag = validate.labels["flag"]
+                flagins = validate.instructions[flag]
+                self.fail("Interpreter is not ICWS88-compliant. died in %d steps at %s" % (i, flagins))
 
     def test_crazy_warrrior(self):
         self.warrior_step_by_step("crazy.red", "crazy-steps.red", -22, 22)
@@ -93,7 +97,8 @@ class TestMars(unittest.TestCase):
                     next_queued = int(m.group(1))
                     # has a full program, parse it
                     expected = redcode.parse(accum_lines)
-
+                    for instruction in expected:
+                        instruction.normalize(simulation.core.size)
                     # compare with next in queue
                     if not test_w.task_queue:
                         self.fail("No tasks in queue. step %d, line %d" % (nth, n))
@@ -104,11 +109,14 @@ class TestMars(unittest.TestCase):
                                   (next_queued, test_w.task_queue[0], nth, n))
 
                     # compare it with the current state
-                    for e, i in zip(expected, simulation.core[core_start:core_end]):
+                    memory = simulation.core[core_start:core_end]
+                    for instruction in memory:
+                        instruction.normalize(simulation.core.size)
+                    for e, i in zip(expected, memory):
                         if e != i:
                             print()
                             x = core_start
-                            for e, i in zip(expected, simulation.core[core_start:core_end]):
+                            for e, i in zip(expected, memory):
                                 if e != i:
                                     print("%05d %s != %s" % (x, str(e), str(i)))
                                 else:
