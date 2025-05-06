@@ -7,20 +7,15 @@ def test_position_calculation_with_add():
     """Test position calculations with repeated ADD operations in a 10x10 grid."""
     
     # Create a warrior with a single ADD instruction
-    warrior = Warrior(name="test", author="test", start=0)
-    warrior.instructions = [
-        Instruction(opcode=ADD, modifier=M_AB, a_mode=IMMEDIATE, b_mode=IMMEDIATE, a_number=7, b_number=0),
-        Instruction(opcode=JMP, modifier=M_A, a_mode=DIRECT, b_mode=DIRECT, a_number=-1, b_number=-1)
-    ]
+    warrior = Warrior(name="test", author="test")
+    warrior.instructions = {
+        Point2D(0, 0): Instruction(opcode=ADD, modifier=M_AB, a_mode=IMMEDIATE, b_mode=IMMEDIATE, a_number=7, b_number=0),
+        Point2D(1, 0): Instruction(opcode=JMP, modifier=M_A, a_mode=DIRECT, b_mode=DIRECT, a_number=-1, b_number=-1)
+    }
 
     core = Core(width=10, size=100)
     mars = MARS(core=core, warriors = [warrior])
     
-    # Initialize position at (0,0)
-    #current_pos = Point2D(0, 0)
-    #mars.enqueue(warrior, current_pos)
-    
-
     # Expected positions after each ADD #7, 1 operation
     expected_positions = [
         Point2D(0, 0), 
@@ -48,14 +43,10 @@ def test_position_calculation_with_add():
     
     # Run 20 steps and verify positions
     for i in range(20):
-        #actual_pos = warrior.task_queue[0] if warrior.task_queue else None
-        instruction = core[Point2D(0)]
+        instruction = core[Point2D(0, 0)]
         expected_pos = expected_positions[i]
         calculated_address = (7*i) % 100
         assert calculated_address == mars.point_to_index(expected_pos), f"Step {i}: Expected address{expected_pos}, got {calculated_address}"
-            
-        #assert actual_pos is not None, f"Step {i}: Warrior has no task queue"
-        #assert actual_pos == expected_pos, f"Step {i}: Expected {expected_pos}, got {actual_pos}"
         
         # Verify the instruction at the current position
         assert instruction.opcode == ADD, f"Step {i}: Expected ADD instruction"
@@ -65,25 +56,19 @@ def test_position_calculation_with_add():
         mars.step() # ADD
         mars.step() # JMP
 
-
 def test_position_calculation_with_add_negative():
     """Test position calculations with repeated ADD operations in a 10x10 grid."""
     
     # Create a warrior with a single ADD instruction
-    warrior = Warrior(name="test", author="test", start=0)
-    warrior.instructions = [
-        Instruction(opcode=ADD, modifier=M_AB, a_mode=IMMEDIATE, b_mode=IMMEDIATE, a_number=-7, b_number=0),
-        Instruction(opcode=JMP, modifier=M_A, a_mode=DIRECT, b_mode=DIRECT, a_number=-1, b_number=-1)
-    ]
+    warrior = Warrior(name="test", author="test")
+    warrior.instructions = {
+        Point2D(0, 0): Instruction(opcode=ADD, modifier=M_AB, a_mode=IMMEDIATE, b_mode=IMMEDIATE, a_number=-7, b_number=0),
+        Point2D(1, 0): Instruction(opcode=JMP, modifier=M_A, a_mode=DIRECT, b_mode=DIRECT, a_number=-1, b_number=-1)
+    }
 
     core = Core(width=10, size=100)
     mars = MARS(core=core, warriors = [warrior])
     
-    # Initialize position at (0,0)
-    #current_pos = Point2D(0, 0)
-    #mars.enqueue(warrior, current_pos)
-    
-
     # Expected positions after each ADD #7, 1 operation
     expected_positions = [
         Point2D(0, 0), 
@@ -106,14 +91,10 @@ def test_position_calculation_with_add_negative():
     
     # Run 20 steps and verify positions
     for i in range(16):
-        #actual_pos = warrior.task_queue[0] if warrior.task_queue else None
-        instruction = core[Point2D(0)]
+        instruction = core[Point2D(0, 0)]
         expected_pos = expected_positions[i]
         calculated_address = (-7*i) % 100
         assert calculated_address == mars.point_to_index(expected_pos), f"Step {i}: Expected address{expected_pos}, got {calculated_address}"
-            
-        #assert actual_pos is not None, f"Step {i}: Warrior has no task queue"
-        #assert actual_pos == expected_pos, f"Step {i}: Expected {expected_pos}, got {actual_pos}"
         
         # Verify the instruction at the current position
         assert instruction.opcode == ADD, f"Step {i}: Expected ADD instruction"

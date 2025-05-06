@@ -13,6 +13,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..',
 #rom corewar import redcode, mars
 import redcode
 import mars
+from redcode import Point2D
 
 DEFAULT_ENV = {'CORESIZE': 8000, 'MAXLENGTH': 100}
 
@@ -96,31 +97,36 @@ class TestMars(unittest.TestCase):
                     next_queued = int(m.group(1))
                     # has a full program, parse it
                     expected = redcode.parse(accum_lines)
-                    for instruction in expected:
-                        instruction.normalize(simulation.core.size)
+                    print(f"expected: {expected}")
+                    # Normalize all instructions in the expected warrior
+                    
                     # compare with next in queue
                     if not test_w.task_queue:
                         self.fail("No tasks in queue. step %d, line %d" % (nth, n))
-                    sim = simulation.point_to_index(test_w.task_queue[0])
-                    print(f"nth: {nth}, next_queued: {next_queued}, sim: {sim}={test_w.task_queue[0]}")
-                    if sim != next_queued:
+                    
+                    # Convert linear position to 2D for comparison
+                    expected_pos = simulation.normalize(Point2D(next_queued))
+                    actual_pos = test_w.task_queue[0]
+                    
+                    print(f"nth: {nth}, next_queued: {next_queued}, expected: {expected_pos}, actual: {actual_pos}")
+                    
+                    if simulation.point_to_index(actual_pos) != next_queued:
                         self.fail("Task address does not match (%d != %d). step %d, line %d" %
-                                  (next_queued, test_w.task_queue[0], nth, n))
+                                  (next_queued, simulation.point_to_index(actual_pos), nth, n))
 
-                    # compare it with the current state
-                    memory = simulation.core[core_start:core_end]
-                    for instruction in memory:
-                        instruction.normalize(simulation.core.size)
-                    for e, i in zip(expected, memory):
-                        if e != i:
+                    # Compare instructions in memory with expected instructions
+                    for pos, expected_instr in expected.instructions.items():
+                        expected_instr.normalize(simulation.core.size)
+                    
+                        # Get the actual instruction at this position
+                        actual_instr = simulation.core[pos+core_start]
+                        actual_instr.normalize(simulation.core.size)
+                        
+                        if expected_instr != actual_instr:
                             print()
-                            x = core_start
-                            for e, i in zip(expected, memory):
-                                if e != i:
-                                    print("%05d %s != %s" % (x, str(e), str(i)))
-                                else:
-                                    print("%05d %s == %s" % (x, str(e), str(i)))
-                                x += 1
+                            print(f"Position {pos}:")
+                            print(f"Expected: {expected_instr}")
+                            print(f"Actual:   {actual_instr}")
                             self.fail("Core don't match, step %d, line %d" % (nth, n))
 
                     # next state

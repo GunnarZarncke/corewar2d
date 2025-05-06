@@ -213,23 +213,41 @@ class Warrior(object):
     "An encapsulation of a Redcode Warrior, with instructions and meta-data"
 
     def __init__(self, name='Unnamed', author='Anonymous', date=None,
-                 version=None, strategy=None, start=0):
+                 version=None, strategy=None, start=Point2D(0)):
         self.name = name
         self.author = author
         self.date = date
         self.version = version
         self.strategy = strategy
         self.start = start
-        self.instructions = []
+        self.instructions = {}  # Map of Point2D -> Instruction
+        self.task_queue = []
 
     def __iter__(self):
-        return iter(self.instructions)
+        return iter(self.instructions.items())
 
     def __len__(self):
         return len(self.instructions)
 
     def __repr__(self):
         return "<Warrior %s by %s>" % (self.name, self.instructions)
+
+    def get_bounds(self):
+        """Get the bounds of the warrior's instructions in 2D space."""
+        if not self.instructions:
+            return Point2D(0, 0), Point2D(0, 0)
+        
+        min_x = min(p.x for p in self.instructions.keys())
+        max_x = max(p.x for p in self.instructions.keys())
+        min_y = min(p.y for p in self.instructions.keys())
+        max_y = max(p.y for p in self.instructions.keys())
+        
+        return Point2D(min_x, min_y), Point2D(max_x, max_y)
+
+    def get_size(self):
+        """Get the size of the warrior in 2D space."""
+        min_point, max_point = self.get_bounds()
+        return Point2D(max_point.x - min_point.x + 1, max_point.y - min_point.y + 1)
 
 class Instruction(object):
     "An encapsulation of a Redcode instruction."
@@ -365,7 +383,8 @@ def parse(input, definitions={}):
 
     found_recode_info_comment = False
     labels = {}
-    code_address = 0
+    current_pos = Point2D(0, 0)  # Track current position in 2D space
+    used_positions = set()  # Track used positions to detect overlaps
 
     warrior = Warrior()
     warrior.strategy = []
@@ -385,10 +404,11 @@ def parse(input, definitions={}):
                     break;
                 else:
                     # first ;redcode ignore all input before
-                    warrior.instructions = []
+                    warrior.instructions = {}
                     labels = {}
                     environment = copy(definitions)
-                    code_address = 0
+                    current_pos = Point2D(0, 0)
+                    used_positions = set()
                     found_recode_info_comment = True
                 continue
 
@@ -460,7 +480,7 @@ def parse(input, definitions={}):
                 if m:
                     label_candidate = m.group(1)
                     if label_candidate.upper() not in OPCODES:
-                        labels[label_candidate] = code_address
+                        labels[label_candidate] = current_pos
 
                         # strip label off and keep looking
                         line = m.group(2)
@@ -476,14 +496,14 @@ def parse(input, definitions={}):
                                  (n, line))
             else:
                 opcode, modifier, stepping, a_mode, a_number, b_mode, b_number = m.groups()
-                print("DEBUG: Parsed instruction components:")
-                print(f"  opcode: {opcode}")
-                print(f"  modifier: {modifier}")
-                print(f"  stepping: {stepping}")
-                print(f"  a_mode: {a_mode}")
-                print(f"  a_number: {a_number}")
-                print(f"  b_mode: {b_mode}")
-                print(f"  b_number: {b_number}")
+                #print("DEBUG: Parsed instruction components:")
+                #print(f"  opcode: {opcode}")
+                #print(f"  modifier: {modifier}")
+                #print(f"  stepping: {stepping}")
+                #print(f"  a_mode: {a_mode}")
+                #print(f"  a_number: {a_number}")
+                #print(f"  b_mode: {b_mode}")
+                #print(f"  b_number: {b_number}")
 
                 if opcode.upper() not in OPCODES:
                     raise ValueError('Invalid opcode: %s in line %d: "%s"' %
@@ -494,6 +514,10 @@ def parse(input, definitions={}):
                 if stepping is not None and stepping.upper() not in STEP_MODIFIERS:
                     raise ValueError('Invalid stepping modifier: %s in line %d: "%s"' %
                                      (stepping, n, line))
+
+                # Check if position is already used
+                if current_pos in used_positions:
+                    raise ValueError(f'Error at line {n}: instruction position {current_pos} already used')
 
                 # Parse Point2D values if present
                 try:
@@ -506,15 +530,23 @@ def parse(input, definitions={}):
                 except:
                     pass
 
-                # add parts of instruction read. the fields should be parsed
-                # as an expression in the second pass, to expand labels
-                warrior.instructions.append(Instruction(opcode, modifier, stepping,
-                                                        a_mode, a_number,
-                                                        b_mode, b_number))
+                # Create instruction and store at current position
+                instruction = Instruction(opcode, modifier, stepping,
+                                       a_mode, a_number,
+                                       b_mode, b_number)
+                warrior.instructions[current_pos] = instruction
+                used_positions.add(current_pos)
 
-            # increment code counting
-            code_address += 1
-
+                # Calculate next position based on stepping mode
+                stepping_mode = STEP_MODIFIERS[stepping.upper()] if stepping else STEP_NORMAL
+                if stepping_mode == STEP_NORMAL:
+                    current_pos = Point2D(current_pos.x + 1, current_pos.y)
+                elif stepping_mode == STEP_VERTICAL:
+                    current_pos = Point2D(current_pos.x, current_pos.y + 1)
+                elif stepping_mode == STEP_BACKWARD:
+                    current_pos = Point2D(current_pos.x - 1, current_pos.y)
+                elif stepping_mode == STEP_VERTICAL_BACKWARD:
+                    current_pos = Point2D(current_pos.x, current_pos.y - 1)
 
     # join strategy lines with line breaks
     warrior.strategy = '\n'.join(warrior.strategy)
@@ -522,13 +554,15 @@ def parse(input, definitions={}):
     # evaluate start expression
     if isinstance(warrior.start, str):
         warrior.start = eval(warrior.start, environment, labels)
+    if isinstance(warrior.start, int):
+        warrior.start = Point2D(warrior.start, 0)
 
-    # second pass
-    for n, instruction in enumerate(warrior.instructions):
-
+    # second pass - evaluate labels and expressions
+    for pos, instruction in warrior.instructions.items():
         # create a dictionary of relative labels addresses to be used as a local
         # eval environment
-        relative_labels = dict((name, address-n) for name, address in labels.items())
+        relative_labels = dict((name, Point2D(address.x - pos.x, address.y - pos.y)) 
+                             for name, address in labels.items())
 
         # evaluate instruction fields using global environment and labels
         if isinstance(instruction.a_number, str):

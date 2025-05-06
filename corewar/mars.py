@@ -7,8 +7,8 @@ import operator
 from random import randint
 
 from core import Core, DEFAULT_INITIAL_INSTRUCTION
-from redcode import Point2D
 from redcode import *
+from redcode import Point2D, STEP_NORMAL, STEP_VERTICAL, STEP_BACKWARD, STEP_VERTICAL_BACKWARD
 
 __all__ = ['MARS', 'EVENT_EXECUTED', 'EVENT_I_WRITE', 'EVENT_I_READ',
            'EVENT_A_DEC', 'EVENT_A_INC', 'EVENT_B_DEC', 'EVENT_B_INC',
@@ -84,30 +84,47 @@ class MARS(object):
         space = len(self.core) // len(self.warriors)
 
         for n, warrior in enumerate(self.warriors):
-            # position is in the nth equally separated space plus a random
-            # shift up to where the last instruction is minimum separated from
-            # the first instruction of the next warrior
-            warrior_position = Point2D(n * space % self.core.width, 
-                                     n * space // self.core.width)
+            # Calculate base position using linear addressing
+            base_pos = n * space
+            
+            # Convert to 2D coordinates using core width
+            warrior_position = Point2D(base_pos % self.core.width, 
+                                     base_pos // self.core.width)
+
+            # Get warrior's grid size
+            warrior_size = warrior.get_size()
+            warrior_grid_size = warrior_size.x + warrior_size.y * self.core.width
 
             if randomize:
-                # Randomize within the space, maintaining 2D layout
-                x = warrior_position.x + randint(0, max(0, space - len(warrior) - self.minimum_separation))
-                y = warrior_position.y + (x // self.core.width)
-                x = x % self.core.width
-                warrior_position = Point2D(x, y)
+                # Randomize within the space, maintaining minimum separation
+                max_offset = space - warrior_grid_size - self.minimum_separation
+                if max_offset > 0:
+                    offset = randint(0, max_offset)
+                    # Convert offset to 2D coordinates
+                    warrior_position = Point2D(
+                        (base_pos + offset) % self.core.width,
+                        (base_pos + offset) // self.core.width
+                    )
 
-            # add first and unique warrior task - using Point2D for PC
-            warrior.task_queue = [Point2D(warrior_position.x + warrior.start % self.core.width,
-                                        warrior_position.y + warrior.start // self.core.width)]
+            # Convert warrior's start position to 2D
+            start_pos = Point2D(
+                warrior_position.x + warrior.start.x,
+                warrior_position.y + warrior.start.y
+            )
 
-            # copy warrior's instructions to the core
-            for i, instruction in enumerate(warrior.instructions):
-                x = (warrior_position.x + i) % self.core.width
-                y = warrior_position.y + ((warrior_position.x + i) // self.core.width)
-                addr = Point2D(x, y)
-                self.set_instruction(addr, copy(instruction))
-                self.core_event(warrior, addr, EVENT_I_WRITE)
+            # Add first task
+            warrior.task_queue = [start_pos]
+
+            # Copy warrior's instructions to the core
+            for pos, instruction in warrior.instructions.items():
+                # Calculate absolute position in core
+                abs_x = (warrior_position.x + pos.x) % self.core.width
+                abs_y = (warrior_position.y + pos.y) % self.core.height
+                abs_pos = Point2D(abs_x, abs_y)
+                
+                # Store instruction
+                self.set_instruction(abs_pos, copy(instruction))
+                self.core_event(warrior, abs_pos, EVENT_I_WRITE)
 
     def enqueue(self, warrior, point):
         """Enqueue another process into the warrior's task queue. Only if it's
@@ -170,6 +187,19 @@ class MARS(object):
             self.get_instruction(pip_point).b_number += 1
             self.core_event(warrior, pip_point, EVENT_B_INC)
 
+    def get_next_pc(self, pc, stepping):
+        """Get the next PC based on the stepping mode."""
+        if stepping == STEP_NORMAL:
+            return Point2D(pc.x + 1, pc.y)
+        elif stepping == STEP_VERTICAL:
+            return Point2D(pc.x, pc.y + 1)
+        elif stepping == STEP_BACKWARD:
+            return Point2D(pc.x - 1, pc.y)
+        elif stepping == STEP_VERTICAL_BACKWARD:
+            return Point2D(pc.x, pc.y - 1)
+        else:
+            raise ValueError(f"Invalid stepping mode: {stepping}")
+
     def execute_instruction(self, warrior, pc, ir, ira, irb, rpa, rpb, wpb):
         """Execute a single instruction based on its opcode."""
         if ir.opcode == DAT:
@@ -196,7 +226,7 @@ class MARS(object):
         elif ir.opcode == DJN:
             self.execute_djn(warrior, pc, ir, irb, rpa, wpb)
         elif ir.opcode == SPL:
-            self.enqueue(warrior, Point2D(pc.x + 1, pc.y))
+            self.enqueue(warrior, self.get_next_pc(pc, ir.stepping))
             self.enqueue(warrior, Point2D(pc.x + rpa.x, pc.y + rpa.y))
         elif ir.opcode == SLT:
             self.do_comparison(warrior, pc, ir, ira, irb, rpa, rpb, operator.lt)
@@ -205,7 +235,7 @@ class MARS(object):
         elif ir.opcode == SNE:
             self.do_comparison(warrior, pc, ir, ira, irb, rpa, rpb, operator.ne)
         elif ir.opcode == NOP:
-            self.enqueue(warrior, Point2D(pc.x + 1, pc.y))
+            self.enqueue(warrior, self.get_next_pc(pc, ir.stepping))
         else:
             raise ValueError("Invalid opcode: %d" % ir.opcode)
 
@@ -256,12 +286,12 @@ class MARS(object):
         else:
             raise ValueError("Invalid modifier: %d" % ir.modifier)
 
-        self.enqueue(warrior, Point2D(pc.x + 1, pc.y))
+        self.enqueue(warrior, self.get_next_pc(pc, ir.stepping))
 
     def execute_jmz(self, warrior, pc, ir, irb, rpa):
         """Execute a JMZ instruction."""
         rpa_point = Point2D(pc.x + rpa.x, pc.y + rpa.y)
-        next_point = Point2D(pc.x + 1, pc.y)
+        next_point = self.get_next_pc(pc, ir.stepping)
 
         if ir.modifier == M_A or ir.modifier == M_BA:
             self.enqueue(warrior, rpa_point if irb.a_number == 0 else next_point)
@@ -279,7 +309,7 @@ class MARS(object):
     def execute_jmn(self, warrior, pc, ir, irb, rpa):
         """Execute a JMN instruction."""
         rpa_point = Point2D(pc.x + rpa.x, pc.y + rpa.y)
-        next_point = Point2D(pc.x + 1, pc.y)
+        next_point = self.get_next_pc(pc, ir.stepping)
 
         if ir.modifier == M_A or ir.modifier == M_BA:
             self.enqueue(warrior, rpa_point if irb.a_number != 0 else next_point)
@@ -298,7 +328,7 @@ class MARS(object):
         """Execute a DJN instruction."""
         target_point = Point2D(pc.x + wpb.x, pc.y + wpb.y)
         rpa_point = Point2D(pc.x + rpa.x, pc.y + rpa.y)
-        next_point = Point2D(pc.x + 1, pc.y)
+        next_point = self.get_next_pc(pc, ir.stepping)
 
         if ir.modifier == M_A or ir.modifier == M_BA:
             self.get_instruction(target_point).a_number -= 1
@@ -402,9 +432,9 @@ class MARS(object):
             else:
                 raise ValueError("Invalid modifier: %d" % ir.modifier)
 
-            # enqueue next instruction
-            self.enqueue(warrior, Point2D(pc.x + 1, pc.y))
+            self.enqueue(warrior, self.get_next_pc(pc, ir.stepping))
         except ZeroDivisionError:
+            # In case of division by zero, the process is killed
             pass
 
     def do_comparison(self, warrior, pc, ir, ira, irb, rpa, rpb, cmp):
@@ -412,8 +442,8 @@ class MARS(object):
         # Pre-calculate common points
         rpa_point = Point2D(pc.x + rpa.x, pc.y + rpa.y)
         rpb_point = Point2D(pc.x + rpb.x, pc.y + rpb.y)
-        next_point = Point2D(pc.x + 1, pc.y)
-        jump_point = Point2D(pc.x + 2, pc.y)
+        next_point = self.get_next_pc(pc, ir.stepping)
+        jump_point = self.get_next_pc(next_point, ir.stepping)
 
         if ir.modifier == M_A:
             result = cmp(ira.a_number, irb.a_number)

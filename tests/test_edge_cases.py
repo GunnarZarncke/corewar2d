@@ -20,12 +20,12 @@ def test_long_term_add_effects():
     ]
     
     for a_number, b_number in test_cases:
-        warrior = Warrior(name=f"add_{a_number}_{b_number}", author="test", start=0)
-        warrior.instructions = [
-            Instruction(opcode=ADD, modifier=M_F, a_mode=IMMEDIATE, b_mode=DIRECT, 
+        warrior = Warrior(name=f"add_{a_number}_{b_number}", author="test")
+        warrior.instructions = {
+            Point2D(0, 0): Instruction(opcode=ADD, modifier=M_F, a_mode=IMMEDIATE, b_mode=DIRECT, 
                        a_number=a_number, b_number=b_number),
-            Instruction(opcode=JMP, modifier=M_A, a_mode=DIRECT, b_mode=DIRECT, a_number=-1, b_number=-1)
-        ]
+            Point2D(1, 0): Instruction(opcode=JMP, modifier=M_A, a_mode=DIRECT, b_mode=DIRECT, a_number=-1, b_number=-1)
+        }
         
         core = Core(width=10, size=100)
         mars = MARS(core=core, warriors=[warrior])
@@ -56,12 +56,12 @@ def test_multiplicative_effects():
     ]
     
     for a_number, b_number in test_cases:
-        warrior = Warrior(name=f"mul_{a_number}_{b_number}", author="test", start=0)
-        warrior.instructions = [
-            Instruction(opcode=MUL, modifier=M_F, a_mode=IMMEDIATE, b_mode=DIRECT,
+        warrior = Warrior(name=f"mul_{a_number}_{b_number}", author="test")
+        warrior.instructions = {
+            Point2D(0, 0): Instruction(opcode=MUL, modifier=M_F, a_mode=IMMEDIATE, b_mode=DIRECT,
                        a_number=a_number, b_number=b_number),
-            Instruction(opcode=JMP, modifier=M_A, a_mode=DIRECT, b_mode=DIRECT, a_number=-1, b_number=-1)
-        ]
+            Point2D(1, 0): Instruction(opcode=JMP, modifier=M_A, a_mode=DIRECT, b_mode=DIRECT, a_number=-1, b_number=-1)
+        }
         
         core = Core(width=10, size=100)
         mars = MARS(core=core, warriors=[warrior])
@@ -95,12 +95,12 @@ def test_modulo_effects():
     ]
     
     for a_number, b_number in test_cases:
-        warrior = Warrior(name=f"mod_{a_number}_{b_number}", author="test", start=0)
-        warrior.instructions = [
-            Instruction(opcode=MOD, modifier=M_F, a_mode=IMMEDIATE, b_mode=DIRECT,
+        warrior = Warrior(name=f"mod_{a_number}_{b_number}", author="test")
+        warrior.instructions = {
+            Point2D(0, 0): Instruction(opcode=MOD, modifier=M_F, a_mode=IMMEDIATE, b_mode=DIRECT,
                        a_number=a_number, b_number=b_number),
-            Instruction(opcode=JMP, modifier=M_A, a_mode=DIRECT, b_mode=DIRECT, a_number=-1, b_number=-1)
-        ]
+            Point2D(1, 0): Instruction(opcode=JMP, modifier=M_A, a_mode=DIRECT, b_mode=DIRECT, a_number=-1, b_number=-1)
+        }
         
         core = Core(width=10, size=100)
         mars = MARS(core=core, warriors=[warrior])
@@ -123,13 +123,13 @@ def test_modulo_effects():
 
 def test_combined_operations():
     """Test effects of combining different operations."""
-    warrior = Warrior(name="combined_ops", author="test", start=0)
-    warrior.instructions = [
-        Instruction(opcode=ADD, modifier=M_F, a_mode=IMMEDIATE, b_mode=DIRECT, a_number=3, b_number=1),
-        Instruction(opcode=MUL, modifier=M_F, a_mode=IMMEDIATE, b_mode=DIRECT, a_number=2, b_number=1),
-        Instruction(opcode=MOD, modifier=M_F, a_mode=IMMEDIATE, b_mode=DIRECT, a_number=5, b_number=1),
-        Instruction(opcode=JMP, modifier=M_A, a_mode=DIRECT, b_mode=DIRECT, a_number=-3, b_number=-3)
-    ]
+    warrior = Warrior(name="combined_ops", author="test")
+    warrior.instructions = {
+        Point2D(0, 0): Instruction(opcode=ADD, modifier=M_F, a_mode=IMMEDIATE, b_mode=DIRECT, a_number=3, b_number=1),
+        Point2D(1, 0): Instruction(opcode=MUL, modifier=M_F, a_mode=IMMEDIATE, b_mode=DIRECT, a_number=2, b_number=1),
+        Point2D(2, 0): Instruction(opcode=MOD, modifier=M_F, a_mode=IMMEDIATE, b_mode=DIRECT, a_number=5, b_number=1),
+        Point2D(3, 0): Instruction(opcode=JMP, modifier=M_A, a_mode=DIRECT, b_mode=DIRECT, a_number=-3, b_number=-3)
+    }
     
     core = Core(width=10, size=100)
     mars = MARS(core=core, warriors=[warrior])
@@ -161,12 +161,12 @@ def test_addressing_mode_effects():
     ]
     
     for a_mode, b_mode in test_cases:
-        warrior = Warrior(name=f"addr_{a_mode}_{b_mode}", author="test", start=0)
-        warrior.instructions = [
-            Instruction(opcode=ADD, modifier=M_F, a_mode=a_mode, b_mode=b_mode,
+        warrior = Warrior(name=f"addr_{a_mode}_{b_mode}", author="test")
+        warrior.instructions = {
+            Point2D(0, 0): Instruction(opcode=ADD, modifier=M_F, a_mode=a_mode, b_mode=b_mode,
                        a_number=3, b_number=1),
-            Instruction(opcode=JMP, modifier=M_A, a_mode=DIRECT, b_mode=DIRECT, a_number=-1, b_number=-1)
-        ]
+            Point2D(1, 0): Instruction(opcode=JMP, modifier=M_A, a_mode=DIRECT, b_mode=DIRECT, a_number=-1, b_number=-1)
+        }
         
         core = Core(width=10, size=100)
         mars = MARS(core=core, warriors=[warrior])

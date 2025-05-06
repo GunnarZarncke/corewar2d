@@ -2,8 +2,8 @@
 #! coding: utf-8
 
 import unittest
-
 from redcode import *
+from redcode import Point2D
 
 DEFAULT_ENV = {'CORESIZE': 8000}
 
@@ -31,11 +31,11 @@ class TestRedcodeAssembler(unittest.TestCase):
         self.assertEqual(3, len(warrior))
 
         self.assertEqual(Instruction(ADD, M_AB, None, IMMEDIATE, 2004, DIRECT, 1),
-                          warrior.instructions[0])
+                          warrior.instructions[Point2D(0, 0)])
         self.assertEqual(Instruction(MOV, M_I, None, DIRECT, 2, DIRECT, 2),
-                          warrior.instructions[1])
+                          warrior.instructions[Point2D(1, 0)])
         self.assertEqual(Instruction(JMP, M_F, None, DIRECT, -2, DIRECT, 0),
-                          warrior.instructions[2])
+                          warrior.instructions[Point2D(2, 0)])
 
 if __name__ == '__main__':
     unittest.main()
