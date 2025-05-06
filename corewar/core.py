@@ -36,8 +36,8 @@ class Core(object):
             import traceback
             traceback.print_stack()
             raise ValueError("Point2D expected, got %s" % type(point))
-        if point.x != point.x % self.size or point.y != point.y % self.size:
-            print(f"normalize_point: {point} -> {Point2D(point.x % self.size, point.y % self.size)}")
+        #if point.x != point.x % self.size or point.y != point.y % self.size:
+        #    print(f"normalize_point: {point} -> {Point2D(point.x % self.size, point.y % self.size)}")
         return Point2D(point.x % self.size, point.y % self.size)
             
     def point_to_grid(self, point):
@@ -78,7 +78,7 @@ class Core(object):
             return self.instructions[self.point_to_index(key)]
 
     def __setitem__(self, address, instruction):
-        print(f"set: {address} [{self.point_to_index(address)}] = {instruction}")
+        #print(f"set: {address} [{self.point_to_index(address)}] = {instruction}")
         self.instructions[self.point_to_index(address)] = instruction
 
     def __iter__(self):

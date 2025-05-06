@@ -362,7 +362,7 @@ class MARS(object):
                 # The process counter is the next instruction-address in the
                 # warrior's task queue
                 pc = warrior.task_queue.pop(0)
-                print(f"pc: {pc}")
+                #print(f"pc: {pc}")
                 if not isinstance(pc, Point2D):
                     raise ValueError("Invalid process counter: %s" % pc)
 
