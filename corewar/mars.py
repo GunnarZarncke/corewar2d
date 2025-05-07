@@ -146,7 +146,30 @@ class MARS(object):
     def __getitem__(self, point):
         return self.get_instruction(point)
 
-    def evaluate_operand(self, pc, number, mode, warrior):
+    def increment_by_stepping(self, point, amount, stepping):
+        """Increment a point based on the stepping mode.
+        
+        Args:
+            point: Point2D to increment
+            amount: Amount to increment by (can be negative for decrement)
+            stepping: Stepping mode to use
+            
+        Returns:
+            Point2D: New incremented point
+        """
+        print(f"stepping: {stepping}, amount: {amount}, point: {point}")
+        if stepping == STEP_NORMAL:
+            return Point2D(point.x + amount, point.y)
+        elif stepping == STEP_VERTICAL:
+            return Point2D(point.x, point.y + amount)
+        elif stepping == STEP_BACKWARD:
+            return Point2D(point.x - amount, point.y)
+        elif stepping == STEP_VERTICAL_BACKWARD:
+            return Point2D(point.x, point.y - amount)
+        else:
+            raise ValueError(f"Invalid stepping mode: {stepping}")
+
+    def evaluate_operand(self, pc, number, mode, stepping, warrior):
         """Evaluate an operand (A or B) and return (read_point, write_point, pip_point)."""
         if mode == IMMEDIATE:
             return Point2D(0), Point2D(0), None
@@ -159,46 +182,38 @@ class MARS(object):
 
                 # pre-decrement, if needed
                 if mode == PREDEC_A:
-                    self.get_instruction(pip_point).a_number -= 1
+                    instruction = self.get_instruction(pip_point)
+                    instruction.a_number = self.increment_by_stepping(instruction.a_number, -1, stepping)
                     self.core_event(warrior, pip_point, EVENT_A_DEC)
                 elif mode == PREDEC_B:
-                    self.get_instruction(pip_point).b_number -= 1
+                    instruction = self.get_instruction(pip_point)
+                    instruction.b_number = self.increment_by_stepping(instruction.b_number, -1, stepping)
                     self.core_event(warrior, pip_point, EVENT_B_DEC)
 
                 # calculate the indirect address
                 if mode in (PREDEC_A, INDIRECT_A, POSTINC_A):
                     read_point = Point2D(read_point.x + self.get_instruction(Point2D(pc.x + read_point.x, pc.y + read_point.y)).a_number, 0)
                     write_point = Point2D(write_point.x + self.get_instruction(Point2D(pc.x + write_point.x, pc.y + write_point.y)).a_number, 0)
-                else:
+                else: # B modes
                     read_point = Point2D(read_point.x + self.get_instruction(Point2D(pc.x + read_point.x, pc.y + read_point.y)).b_number, 0)
                     write_point = Point2D(write_point.x + self.get_instruction(Point2D(pc.x + write_point.x, pc.y + write_point.y)).b_number, 0)
 
+                # post-increment is performed after operation by helper handle_post_increment()
+
             return read_point, write_point, pip_point
 
-    def handle_post_increment(self, pip_point, mode, warrior):
+    def handle_post_increment(self, pip_point, mode, stepping, warrior):
         """Handle post-increment operations."""
         if pip_point is None:
             return
 
+        instruction = self.get_instruction(pip_point)
         if mode == POSTINC_A:
-            self.get_instruction(pip_point).a_number += 1
+            instruction.a_number = self.increment_by_stepping(instruction.a_number, 1, stepping)
             self.core_event(warrior, pip_point, EVENT_A_INC)
         elif mode == POSTINC_B:
-            self.get_instruction(pip_point).b_number += 1
+            instruction.b_number = self.increment_by_stepping(instruction.b_number, 1, stepping)
             self.core_event(warrior, pip_point, EVENT_B_INC)
-
-    def get_next_pc(self, pc, stepping):
-        """Get the next PC based on the stepping mode."""
-        if stepping == STEP_NORMAL:
-            return Point2D(pc.x + 1, pc.y)
-        elif stepping == STEP_VERTICAL:
-            return Point2D(pc.x, pc.y + 1)
-        elif stepping == STEP_BACKWARD:
-            return Point2D(pc.x - 1, pc.y)
-        elif stepping == STEP_VERTICAL_BACKWARD:
-            return Point2D(pc.x, pc.y - 1)
-        else:
-            raise ValueError(f"Invalid stepping mode: {stepping}")
 
     def execute_instruction(self, warrior, pc, ir, ira, irb, rpa, rpb, wpb):
         """Execute a single instruction based on its opcode."""
@@ -226,7 +241,7 @@ class MARS(object):
         elif ir.opcode == DJN:
             self.execute_djn(warrior, pc, ir, irb, rpa, wpb)
         elif ir.opcode == SPL:
-            self.enqueue(warrior, self.get_next_pc(pc, ir.stepping))
+            self.enqueue(warrior, self.increment_by_stepping(pc, 1, ir.stepping))
             self.enqueue(warrior, Point2D(pc.x + rpa.x, pc.y + rpa.y))
         elif ir.opcode == SLT:
             self.do_comparison(warrior, pc, ir, ira, irb, rpa, rpb, operator.lt)
@@ -235,7 +250,7 @@ class MARS(object):
         elif ir.opcode == SNE:
             self.do_comparison(warrior, pc, ir, ira, irb, rpa, rpb, operator.ne)
         elif ir.opcode == NOP:
-            self.enqueue(warrior, self.get_next_pc(pc, ir.stepping))
+            self.enqueue(warrior, self.increment_by_stepping(pc, 1, ir.stepping))
         else:
             raise ValueError("Invalid opcode: %d" % ir.opcode)
 
@@ -286,12 +301,12 @@ class MARS(object):
         else:
             raise ValueError("Invalid modifier: %d" % ir.modifier)
 
-        self.enqueue(warrior, self.get_next_pc(pc, ir.stepping))
+        self.enqueue(warrior, self.increment_by_stepping(pc, 1, ir.stepping))
 
     def execute_jmz(self, warrior, pc, ir, irb, rpa):
         """Execute a JMZ instruction."""
         rpa_point = Point2D(pc.x + rpa.x, pc.y + rpa.y)
-        next_point = self.get_next_pc(pc, ir.stepping)
+        next_point = self.increment_by_stepping(pc, 1, ir.stepping)
 
         if ir.modifier == M_A or ir.modifier == M_BA:
             self.enqueue(warrior, rpa_point if irb.a_number == 0 else next_point)
@@ -309,7 +324,7 @@ class MARS(object):
     def execute_jmn(self, warrior, pc, ir, irb, rpa):
         """Execute a JMN instruction."""
         rpa_point = Point2D(pc.x + rpa.x, pc.y + rpa.y)
-        next_point = self.get_next_pc(pc, ir.stepping)
+        next_point = self.increment_by_stepping(pc, 1, ir.stepping)
 
         if ir.modifier == M_A or ir.modifier == M_BA:
             self.enqueue(warrior, rpa_point if irb.a_number != 0 else next_point)
@@ -328,7 +343,7 @@ class MARS(object):
         """Execute a DJN instruction."""
         target_point = Point2D(pc.x + wpb.x, pc.y + wpb.y)
         rpa_point = Point2D(pc.x + rpa.x, pc.y + rpa.y)
-        next_point = self.get_next_pc(pc, ir.stepping)
+        next_point = self.increment_by_stepping(pc, 1, ir.stepping)
 
         if ir.modifier == M_A or ir.modifier == M_BA:
             self.get_instruction(target_point).a_number -= 1
@@ -370,14 +385,14 @@ class MARS(object):
                 ir = copy(self.get_instruction(pc))
 
                 # evaluate the A-operand
-                rpa, wpa, pip_a = self.evaluate_operand(pc, ir.a_number, ir.a_mode, warrior)
+                rpa, wpa, pip_a = self.evaluate_operand(pc, ir.a_number, ir.a_mode, ir.stepping, warrior)
                 ira = copy(self.get_instruction(Point2D(pc.x + rpa.x, pc.y + rpa.y)))
-                self.handle_post_increment(pip_a, ir.a_mode, warrior)
+                self.handle_post_increment(pip_a, ir.a_mode, ir.stepping, warrior)
 
                 # evaluate the B-operand
-                rpb, wpb, pip_b = self.evaluate_operand(pc, ir.b_number, ir.b_mode, warrior)
+                rpb, wpb, pip_b = self.evaluate_operand(pc, ir.b_number, ir.b_mode, ir.stepping, warrior)
                 irb = copy(self.get_instruction(Point2D(pc.x + rpb.x, pc.y + rpb.y)))
-                self.handle_post_increment(pip_b, ir.b_mode, warrior)
+                self.handle_post_increment(pip_b, ir.b_mode, ir.stepping,warrior)
 
                 self.core_event(warrior, pc, EVENT_EXECUTED)
                 self.execute_instruction(warrior, pc, ir, ira, irb, rpa, rpb, wpb)
@@ -432,7 +447,7 @@ class MARS(object):
             else:
                 raise ValueError("Invalid modifier: %d" % ir.modifier)
 
-            self.enqueue(warrior, self.get_next_pc(pc, ir.stepping))
+            self.enqueue(warrior, self.increment_by_stepping(pc, 1, ir.stepping))
         except ZeroDivisionError:
             # In case of division by zero, the process is killed
             pass
@@ -442,8 +457,8 @@ class MARS(object):
         # Pre-calculate common points
         rpa_point = Point2D(pc.x + rpa.x, pc.y + rpa.y)
         rpb_point = Point2D(pc.x + rpb.x, pc.y + rpb.y)
-        next_point = self.get_next_pc(pc, ir.stepping)
-        jump_point = self.get_next_pc(next_point, ir.stepping)
+        next_point = self.increment_by_stepping(pc, 1, ir.stepping)
+        jump_point = self.increment_by_stepping(pc, 2, ir.stepping)
 
         if ir.modifier == M_A:
             result = cmp(ira.a_number, irb.a_number)

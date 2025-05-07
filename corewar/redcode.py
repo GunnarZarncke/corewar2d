@@ -75,6 +75,9 @@ INDIRECT_A = 5  # indirect using A-field
 PREDEC_A = 6    # predecrement indirect using A-field
 POSTINC_A = 7   # postincrement indirect using A-field
 
+MODES = { '#': IMMEDIATE, '$': DIRECT, '@': INDIRECT_B, '<': PREDEC_B,
+          '>': POSTINC_B, '*': INDIRECT_A, '{': PREDEC_A, '}': POSTINC_A }
+
 INSTRUCTION_REGEX = re.compile(r'([a-z]{3})'  # opcode
                                r'(?:\s*\.\s*([abfxi]{1,2}))?' # optional modifier
                                r'(?:\s*\.\s*([wqsd]))?' # optional stepping modifier
@@ -89,9 +92,6 @@ OPCODES = {'DAT': DAT, 'MOV': MOV, 'ADD': ADD, 'SUB': SUB, 'MUL': MUL,
 
 MODIFIERS = {'A': M_A, 'B': M_B, 'AB': M_AB, 'BA': M_BA, 'F': M_F, 'X': M_X,
              'I': M_I}
-
-MODES = { '#': IMMEDIATE, '$': DIRECT, '@': INDIRECT_B, '<': PREDEC_B,
-          '>': POSTINC_B, '*': INDIRECT_A, '{': PREDEC_A, '}': POSTINC_A }
 
 # ICWS'88 to ICWS'94 Conversion
 # The default modifier for ICWS'88 emulation is determined according to the
@@ -351,7 +351,8 @@ class Instruction(object):
     def __eq__(self, other):
         return (self.opcode == other.opcode and self.modifier == other.modifier and
                 self.a_mode == other.a_mode and self.a_number == other.a_number and
-                self.b_mode == other.b_mode and self.b_number == other.b_number)
+                self.b_mode == other.b_mode and self.b_number == other.b_number and
+                self.stepping == other.stepping)
 
     def __ne__(self, other):
         return not self == other

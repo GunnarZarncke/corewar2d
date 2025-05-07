@@ -1,5 +1,5 @@
 import pytest
-from redcode import parse, Instruction, STEP_NORMAL, STEP_VERTICAL, STEP_BACKWARD, STEP_VERTICAL_BACKWARD, Point2D
+from redcode import parse, Instruction, STEP_NORMAL, STEP_VERTICAL, STEP_BACKWARD, STEP_VERTICAL_BACKWARD, Point2D, PREDEC_A, POSTINC_A, INDIRECT_A
 from mars import MARS
 from core import Core
 
@@ -254,3 +254,46 @@ def test_2d_instruction_iteration():
     for pos in positions:
         assert pos in warrior.instructions
         assert isinstance(warrior.instructions[pos], Instruction) 
+
+def test_stepping_increment_decrement():
+    """Test that increment and decrement operations respect stepping modes."""
+    
+    def create_test_warrior():
+        """Create a warrior with test and target instructions."""
+        return parse([
+            'NOP',
+            'MOV.AB.D {2, -1',  # our test instruction modifies 
+            'DAT',
+            'DAT',
+        ])
+    
+    def test_prepost_decrement(stepping_mode, mode, expected_value):
+        """Test pre-decrement operation with given stepping mode."""
+        # Create fresh warrior and MARS instance
+        warrior = create_test_warrior()
+        mars = MARS(warriors=[warrior], randomize=False)
+        mars.step()   # over NOP
+        
+        # Get our test and target instructions
+        test_instr = mars.core[Point2D(1)]
+        target_instr = mars.core[Point2D(3)]
+        
+        # Set up the test
+        test_instr.stepping = stepping_mode
+        test_instr.a_mode = mode
+        
+        # Execute and verify
+        mars.step()
+        assert target_instr.a_number == expected_value
+    
+    # Test pre-decrement with all stepping modes
+    test_prepost_decrement(STEP_NORMAL, PREDEC_A, Point2D(-1, 0))
+    test_prepost_decrement(STEP_VERTICAL, PREDEC_A, Point2D(0, -1))
+    test_prepost_decrement(STEP_BACKWARD, PREDEC_A, Point2D(1, 0))
+    test_prepost_decrement(STEP_VERTICAL_BACKWARD, PREDEC_A, Point2D(0, 1))
+    
+    # Test post-increment with all stepping modes
+    test_prepost_decrement(STEP_NORMAL, POSTINC_A, Point2D(1, 0))
+    test_prepost_decrement(STEP_VERTICAL, POSTINC_A, Point2D(0, 1))
+    test_prepost_decrement(STEP_BACKWARD, POSTINC_A, Point2D(-1, 0))
+    test_prepost_decrement(STEP_VERTICAL_BACKWARD, POSTINC_A, Point2D(0, -1))
