@@ -1,4 +1,3 @@
-
 # Core War
 
 [![Build Status](https://travis-ci.org/rodrigosetti/corewar.svg?branch=master)](https://travis-ci.org/rodrigosetti/corewar)
@@ -27,6 +26,85 @@ for digital supremacy. Warriors are written in an Assembly dialect called
 [Wikipedia article](http://en.wikipedia.org/wiki/Core_War)
 
 This is a Python implementation of the MARS (Memory Array Redcode Simulator).
+
+## Core War 2D
+
+This project extends Core War into two dimensions, allowing for more complex and interesting warrior programs. The 2D implementation includes:
+
+- 2D memory addressing with Point2D coordinates
+- Vertical and diagonal movement
+- Enhanced stepping modes
+- Interactive REPL for program development
+
+### MARS REPL
+
+The MARS REPL (Memory Array Redcode Simulator Read-Eval-Print Loop) is an interactive environment for writing and testing Redcode programs.
+
+#### Features
+
+- Interactive execution of Redcode instructions
+- Real-time memory inspection
+- Program counter control
+- Command history with up/down arrow navigation
+- Program saving with cycle detection
+- Step-by-step execution
+- Event display for debugging
+
+#### Usage
+
+Start the REPL:
+```bash
+python -m corewar.mars_repl
+```
+
+#### Commands
+
+- `clear` - Reset memory
+- `save <file>` - Save current program to file
+- `?<pc>` - Show memory at position (e.g. `?5` or `?1:2`)
+- `=<pc>` - Set program counter (e.g. `=5` or `=1:2`)
+- `step` - Execute one step
+- `quit` - Exit REPL
+
+#### Example Session
+
+```
+MARS [(0,0)]> MOV.I #0, 0
+Next positions: [(1,0)]
+MARS [(1,0)]> ?0
+(0,0)     MOV.I    # 0, $ 0          ; MEMORY
+MARS [(1,0)]> step
+Next positions: [(2,0)]
+MARS [(2,0)]> save my_program.red
+Program saved to my_program.red
+```
+
+### Redcode Instructions
+
+The simulator supports all standard Redcode instructions:
+- DAT - Data (kills process)
+- MOV - Move
+- ADD - Add
+- SUB - Subtract
+- MUL - Multiply
+- DIV - Divide
+- MOD - Modulo
+- JMP - Jump
+- JMZ - Jump if Zero
+- JMN - Jump if Not Zero
+- DJN - Decrement and Jump if Not Zero
+- SPL - Split
+- SLT - Skip if Less Than
+- CMP/SEQ - Compare/Skip if Equal
+- SNE - Skip if Not Equal
+- NOP - No Operation
+
+Each instruction can be modified with:
+- Addressing modes: # (immediate), $ (direct), @ (indirect), < (pre-decrement), > (post-increment)
+- Modifiers: .A, .B, .AB, .BA, .F, .X, .I
+- Stepping modes: .D (normal), .S (vertical), .Q (backward), .W (vertical backward)
+
+### Running the Simulator
 
     usage: graphics.py [-h] [--rounds [ROUNDS]] [--paused] [--size [CORESIZE]]
                        [--cycles [CYCLES]] [--processes [MAXPROCESSES]]
