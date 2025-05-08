@@ -16,6 +16,7 @@ class Parser:
         self.used_positions: Set[Point2D] = set()
         self.environment = copy(self.definitions)
         self.found_redcode_info = False
+        self._last_energy = None
 
     def parse(self, input_lines: Iterator[str]) -> Warrior:
         """Parse Redcode from a line iterator returning a Warrior object."""
@@ -113,6 +114,14 @@ class Parser:
 
     def _strip_comments(self, line: str) -> str:
         """Remove comments from a line."""
+        # First check for energy value in comment
+        energy_match = re.match(r'^([^;]*)\s*;\s*E:(\d+)\s*(?:;.*)?$', line)
+        if energy_match:
+            line = energy_match.group(1).strip()
+            self._last_energy = int(energy_match.group(2))
+            return line
+            
+        # Then handle regular comments
         m = re.match(r'^([^;]*)\s*;', line)
         if m:
             line = m.group(1).strip()
@@ -163,19 +172,19 @@ class Parser:
         if not m:
             raise ValueError(f'Error at line {line_num}: expected instruction in expression: "{line}"')
 
-        opcode, modifier, stepping, a_mode, a_number, b_mode, b_number, energy = m.groups()
+        opcode, modifier, stepping, a_mode, a_number, b_mode, b_number = m.groups()
         
         self._validate_instruction_components(opcode, modifier, stepping, line_num)
         
-        print("DEBUG: Parsed instruction components:")
-        print(f"  opcode:   {opcode}")
-        print(f"  modifier: {modifier}")
-        print(f"  stepping: {stepping}")
-        print(f"  a_mode:   {a_mode}")
-        print(f"  a_number: {a_number}")
-        print(f"  b_mode:   {b_mode}")
-        print(f"  b_number: {b_number}")
-        print(f"  energy:   {energy}")
+        if False:
+            print("DEBUG: Parsed instruction components:")
+            print(f"  opcode:   {opcode}")
+            print(f"  modifier: {modifier}")
+            print(f"  stepping: {stepping}")
+            print(f"  a_mode:   {a_mode}")
+            print(f"  a_number: {a_number}")
+            print(f"  b_mode:   {b_mode}")
+            print(f"  b_number: {b_number}")
 
         if self.current_pos in self.used_positions:
             raise ValueError(f'Error at line {line_num}: instruction position {self.current_pos} already used')
@@ -183,7 +192,8 @@ class Parser:
         # Parse values
         a_number = self._parse_number(a_number)
         b_number = self._parse_number(b_number)
-        energy_value = int(energy) if energy else None
+        energy_value = self._last_energy
+        self._last_energy = None  # Reset after use
 
         # Create and store instruction
         instruction = Instruction(

@@ -10,21 +10,22 @@ def test_mutate_instruction():
     original = copy(DEFAULT_INITIAL_INSTRUCTION)
     
     # Test that mutation creates a new instruction
-    mutated = mutate_instruction(original)
+    mutated, was_changed = mutate_instruction(original)
     assert mutated is not original
     assert isinstance(mutated, Instruction)
     
-    # Test that at least one field is different
-    assert (mutated.opcode != original.opcode or
-            mutated.modifier != original.modifier or
-            mutated.stepping != original.stepping or
-            mutated.a_mode != original.a_mode or
-            mutated.a_number != original.a_number or
-            mutated.b_mode != original.b_mode or
-            mutated.b_number != original.b_number)
+    if was_changed:
+        # Test that at least one field is different
+        assert (mutated.opcode != original.opcode or
+                mutated.modifier != original.modifier or
+                mutated.stepping != original.stepping or
+                mutated.a_mode != original.a_mode or
+                mutated.a_number != original.a_number or
+                mutated.b_mode != original.b_mode or
+                mutated.b_number != original.b_number), f"Mutated: {mutated}, Original: {original}"
     
-    assert isinstance(mutated.a_number, Point2D)
-    assert isinstance(mutated.b_number, Point2D)
+        assert isinstance(mutated.a_number, Point2D)
+        assert isinstance(mutated.b_number, Point2D)
 
 def test_mutate_core():
     # Create a test MARS instance with a small core

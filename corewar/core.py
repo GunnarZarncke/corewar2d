@@ -23,7 +23,7 @@ class Core(object):
             raise ValueError("Core size must be divisible by width")
         self.write_limit = write_limit if write_limit else self.size
         self.read_limit = read_limit if read_limit else self.size
-        self.clear()
+        self.clear(initial_instruction)
 
     def clear(self, instruction=DEFAULT_INITIAL_INSTRUCTION):
         """Writes the same instruction thorough the entire core.

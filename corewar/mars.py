@@ -30,13 +30,16 @@ EVENT_B_READ   = 9
 EVENT_B_WRITE  = 10
 EVENT_A_ARITH  = 11
 EVENT_B_ARITH  = 12
+EVENT_ENERGY_EXHAUSTED = 13
+
+
 
 class MARS(object):
     """The MARS. Encapsulates a simulation.
     """
 
     def __init__(self, core=None, warriors=None, minimum_separation=100,
-                 randomize=True, max_processes=None, total_energy=100000):
+                 randomize=True, max_processes=None, total_energy=0):
         self.core = core if core else Core()
         self.minimum_separation = minimum_separation
         self.max_processes = max_processes if max_processes else len(self.core)
@@ -118,7 +121,7 @@ class MARS(object):
             warrior.task_queue = [start_pos]
 
             # Calculate energy per instruction for this warrior
-            warrior_energy = total_energy // len(warrior.instructions) if self.energy_mode else 1000
+            warrior_energy = total_energy // len(warrior.instructions) if self.energy_mode else 0
 
             # Copy warrior's instructions to the core
             for pos, instruction in warrior.instructions.items():
@@ -398,9 +401,14 @@ class MARS(object):
                 # Get the current instruction
                 ir = self.get_instruction(pc)
 
-                # Check energy if in energy mode
-                if self.energy_mode and not ir.has_energy():
-                    continue  # Skip execution if no energy
+                # Consume energy if in energy mode
+                print(f"energy_mode: {self.energy_mode}, instruction: {ir}")
+
+                if self.energy_mode:
+                    if not ir.consume_energy():
+                        print(f"exhausted energy, instruction: {ir}")
+                        self.core_event(warrior, pc, EVENT_ENERGY_EXHAUSTED)
+                        continue  # Skip execution if not enough energy
 
                 # copy the current instruction to the instruction register
                 ir = copy(ir)
@@ -414,11 +422,6 @@ class MARS(object):
                 rpb, wpb, pip_b = self.evaluate_operand(pc, ir.b_number, ir.b_mode, ir.stepping, warrior)
                 irb = copy(self.get_instruction(Point2D(pc.x + rpb.x, pc.y + rpb.y)))
                 self.handle_post_increment(pip_b, ir.b_mode, ir.stepping, warrior)
-
-                # Consume energy if in energy mode
-                if self.energy_mode:
-                    if not ir.consume_energy():
-                        continue  # Skip execution if not enough energy
 
                 self.core_event(warrior, pc, EVENT_EXECUTED)
                 self.execute_instruction(warrior, pc, ir, ira, irb, rpa, rpb, wpb)

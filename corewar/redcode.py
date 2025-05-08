@@ -82,8 +82,7 @@ INSTRUCTION_REGEX = re.compile(r'([a-z]{3})'  # opcode
                                r'(?:\s*\.\s*([abfxi]{1,2}))?' # optional modifier
                                r'(?:\s*\.\s*([wqsd]))?' # optional stepping modifier
                                r'(?:\s*([#\$\*@\{<\}>])?\s*([^,$]+))?' # optional first value
-                               r'(?:\s*,\s*([#\$\*@\{<\}>])?\s*([^,]+))?' # optional second value
-                               r'(?:\s*,\s+E:(\d+))?$', # optional energy value
+                               r'(?:\s*,\s*([#\$\*@\{<\}>])?\s*([^,]+))?$', # optional second value
                                re.I)
 
 OPCODES = {'DAT': DAT, 'MOV': MOV, 'ADD': ADD, 'SUB': SUB, 'MUL': MUL,
@@ -275,6 +274,8 @@ class Instruction(object):
         self._a_number = a_number
         self._b_number = b_number
 
+        self.energy = energy
+
         # Set default modifier if none provided
         if self.modifier is None:
             self.modifier = self.default_modifier()
@@ -282,7 +283,6 @@ class Instruction(object):
         self.core = None
         self.fg_color = None
         self.bg_color = None
-        self.energy = energy
 
     def core_binded(self, core):
         """Return a copy of this instruction binded to a Core.
@@ -306,7 +306,7 @@ class Instruction(object):
                     a_modes, b_modes = ab_modes
                     if self.a_mode in a_modes and self.b_mode in b_modes:
                         return modifier
-        raise RuntimeError("Error getting default modifier")
+        raise RuntimeError("Error getting default modifier for instruction: %s" % self)
 
     @property
     def a_number(self):
@@ -366,7 +366,7 @@ class Instruction(object):
         stepping_str = {v: k for k, v in STEP_MODIFIERS.items()}.get(self.stepping, '')
         a_mode_str = next(key for key,value in MODES.items() if value==self.a_mode)
         b_mode_str = next(key for key,value in MODES.items() if value==self.b_mode)
-        energy_str = f", E:{self.energy}" if self.energy else ""
+        energy_str = f"; E:{self.energy}" if self.energy else ""
         # Only show stepping modifier if it's not the default (D)
         stepping_suffix = f".{stepping_str}" if stepping_str and stepping_str != 'D' else "  "
         return "%s.%s%s %s %s, %s %s%s" % (opcode_str,
@@ -387,6 +387,7 @@ class Instruction(object):
 
     def consume_energy(self, amount=1):
         """Consume energy from the instruction."""
+        print(f"Consuming energy from {self} with amount {amount}")
         if self.energy >= amount:
             self.energy -= amount
             return True
