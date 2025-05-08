@@ -82,7 +82,8 @@ INSTRUCTION_REGEX = re.compile(r'([a-z]{3})'  # opcode
                                r'(?:\s*\.\s*([abfxi]{1,2}))?' # optional modifier
                                r'(?:\s*\.\s*([wqsd]))?' # optional stepping modifier
                                r'(?:\s*([#\$\*@\{<\}>])?\s*([^,$]+))?' # optional first value
-                               r'(?:\s*,\s*([#\$\*@\{<\}>])?\s*(.+))?$', # optional second value
+                               r'(?:\s*,\s*([#\$\*@\{<\}>])?\s*([^,]+))?' # optional second value
+                               r'(?:\s*,\s+E:(\d+))?$', # optional energy value
                                re.I)
 
 OPCODES = {'DAT': DAT, 'MOV': MOV, 'ADD': ADD, 'SUB': SUB, 'MUL': MUL,
@@ -253,7 +254,7 @@ class Instruction(object):
     "An encapsulation of a Redcode instruction."
 
     def __init__(self, opcode, modifier=None, stepping=None, a_mode=None, a_number=0,
-                 b_mode=None, b_number=0):
+                 b_mode=None, b_number=0, energy=0):
         self.opcode = OPCODES[opcode.upper()] if isinstance(opcode, str) else opcode
         self.modifier = MODIFIERS[modifier.upper()] if isinstance(modifier, str) else modifier
         # Only convert stepping to uppercase if it's a string and not a mode character
@@ -281,6 +282,7 @@ class Instruction(object):
         self.core = None
         self.fg_color = None
         self.bg_color = None
+        self.energy = energy
 
     def core_binded(self, core):
         """Return a copy of this instruction binded to a Core.
@@ -364,215 +366,40 @@ class Instruction(object):
         stepping_str = {v: k for k, v in STEP_MODIFIERS.items()}.get(self.stepping, '')
         a_mode_str = next(key for key,value in MODES.items() if value==self.a_mode)
         b_mode_str = next(key for key,value in MODES.items() if value==self.b_mode)
-
+        energy_str = f", E:{self.energy}" if self.energy else ""
         # Only show stepping modifier if it's not the default (D)
         stepping_suffix = f".{stepping_str}" if stepping_str and stepping_str != 'D' else "  "
-        return "%s.%s%s %s %s, %s %s" % (opcode_str,
+        return "%s.%s%s %s %s, %s %s%s" % (opcode_str,
                                        modifier_str.ljust(2),
                                        stepping_suffix,
                                        a_mode_str,
                                        str(self.a_number),
                                        b_mode_str,
-                                       str(self.b_number))
+                                       str(self.b_number),
+                                       energy_str)
 
     def __repr__(self):
         return "<Instruction %s>" % self
 
+    def has_energy(self):
+        """Check if the instruction has energy to execute."""
+        return self.energy > 0
+
+    def consume_energy(self, amount=1):
+        """Consume energy from the instruction."""
+        if self.energy >= amount:
+            self.energy -= amount
+            return True
+        return False
+
+    def move_energy(self, other_instruction):
+        """Equalize energy between this instruction and another."""
+        total_energy = self.energy + other_instruction.energy
+        self.energy = total_energy // 2
+        other_instruction.energy = total_energy - self.energy
+
 def parse(input, definitions={}):
-    """ Parse a Redcode code from a line iterator (input) returning a Warrior
-        object."""
-
-    found_recode_info_comment = False
-    labels = {}
-    current_pos = Point2D(0, 0)  # Track current position in 2D space
-    used_positions = set()  # Track used positions to detect overlaps
-
-    warrior = Warrior()
-    warrior.strategy = []
-
-    # use a version of environment because we're going to add names to it
-    environment = copy(definitions)
-
-    # first pass
-    for n, line in enumerate(input):
-        line = line.strip()
-        if line:
-            # process info comments
-            m = re.match(r'^;redcode\w*$', line, re.I)
-            if m:
-                if found_recode_info_comment:
-                    # stop reading, found second ;redcode
-                    break;
-                else:
-                    # first ;redcode ignore all input before
-                    warrior.instructions = {}
-                    labels = {}
-                    environment = copy(definitions)
-                    current_pos = Point2D(0, 0)
-                    used_positions = set()
-                    found_recode_info_comment = True
-                continue
-
-            m = re.match(r'^;name\s+(.+)$', line, re.I)
-            if m:
-                warrior.name = m.group(1).strip()
-                continue
-
-            m = re.match(r'^;author\s+(.+)$', line, re.I)
-            if m:
-                warrior.author = m.group(1).strip()
-                continue
-
-            m = re.match(r'^;date\s+(.+)$', line, re.I)
-            if m:
-                warrior.date = m.group(1).strip()
-                continue
-
-            m = re.match(r'^;version\s+(.+)$', line, re.I)
-            if m:
-                warrior.version = m.group(1).strip()
-                continue
-
-            m = re.match(r'^;strat(?:egy)?\s+(.+)$', line, re.I)
-            if m:
-                warrior.strategy.append(m.group(1).strip())
-                continue
-
-            # Test if assert expression evaluates to true
-            m = re.match(r'^;assert\s+(.+)$', line, re.I)
-            if m:
-                if not eval(m.group(1), environment):
-                    raise AssertionError("Assertion failed: %s, line %d" % (line, n))
-                continue
-
-            # ignore other comments
-            m = re.match(r'^([^;]*)\s*;', line)
-            if m:
-                # rip off comment from the line
-                line = m.group(1).strip()
-                # if this is a comment line
-                if not line: continue
-
-            # Match ORG
-            m = re.match(r'^ORG\s+(.+)\s*$', line, re.I)
-            if m:
-                warrior.start = m.group(1)
-                continue
-
-            # Match END
-            m = re.match(r'^END(?:\s+([^\s]+))?$', line, re.I)
-            if m:
-                if m.group(1):
-                    warrior.start = m.group(1)
-                break # stop processing (end of redcode)
-
-            # Match EQU
-            m = re.match(r'^([a-z]\w*)\s+EQU\s+(.*)\s*$', line, re.I)
-            if m:
-                name, value = m.groups()
-                # evaluate EQU expression using previous EQU definitions,
-                # add result to a name variable in environment
-                environment[name] = eval(value, environment)
-                continue
-
-            # Keep matching the first word until it's no label anymore
-            while True:
-                m = re.match(r'^([a-z]\w*)\s+(.+)\s*$', line)
-                if m:
-                    label_candidate = m.group(1)
-                    if label_candidate.upper() not in OPCODES:
-                        labels[label_candidate] = current_pos
-
-                        # strip label off and keep looking
-                        line = m.group(2)
-                        continue
-                # its an instruction, not label. proceed OR no match, probably
-                # a all-value-omitted instruction.
-                break
-
-            # At last, it should match an instruction
-            m = INSTRUCTION_REGEX.match(line)
-            if not m:
-                raise ValueError('Error at line %d: expected instruction in expression: "%s"' %
-                                 (n, line))
-            else:
-                opcode, modifier, stepping, a_mode, a_number, b_mode, b_number = m.groups()
-                #print("DEBUG: Parsed instruction components:")
-                #print(f"  opcode: {opcode}")
-                #print(f"  modifier: {modifier}")
-                #print(f"  stepping: {stepping}")
-                #print(f"  a_mode: {a_mode}")
-                #print(f"  a_number: {a_number}")
-                #print(f"  b_mode: {b_mode}")
-                #print(f"  b_number: {b_number}")
-
-                if opcode.upper() not in OPCODES:
-                    raise ValueError('Invalid opcode: %s in line %d: "%s"' %
-                                     (opcode, n, line))
-                if modifier is not None and modifier.upper() not in MODIFIERS:
-                    raise ValueError('Invalid modifier: %s in line %d: "%s"' %
-                                     (modifier, n, line))
-                if stepping is not None and stepping.upper() not in STEP_MODIFIERS:
-                    raise ValueError('Invalid stepping modifier: %s in line %d: "%s"' %
-                                     (stepping, n, line))
-
-                # Check if position is already used
-                if current_pos in used_positions:
-                    raise ValueError(f'Error at line {n}: instruction position {current_pos} already used')
-
-                # Parse Point2D values if present
-                try:
-                    a_number = Point2D(a_number)
-                except:
-                    pass
-                
-                try:
-                    b_number = Point2D(b_number)
-                except:
-                    pass
-
-                # Create instruction and store at current position
-                instruction = Instruction(opcode, modifier, stepping,
-                                       a_mode, a_number,
-                                       b_mode, b_number)
-                warrior.instructions[current_pos] = instruction
-                used_positions.add(current_pos)
-
-                # Calculate next position based on stepping mode
-                stepping_mode = STEP_MODIFIERS[stepping.upper()] if stepping else STEP_NORMAL
-                if stepping_mode == STEP_NORMAL:
-                    current_pos = Point2D(current_pos.x + 1, current_pos.y)
-                elif stepping_mode == STEP_VERTICAL:
-                    current_pos = Point2D(current_pos.x, current_pos.y + 1)
-                elif stepping_mode == STEP_BACKWARD:
-                    current_pos = Point2D(current_pos.x - 1, current_pos.y)
-                elif stepping_mode == STEP_VERTICAL_BACKWARD:
-                    current_pos = Point2D(current_pos.x, current_pos.y - 1)
-
-    # join strategy lines with line breaks
-    warrior.strategy = '\n'.join(warrior.strategy)
-
-    # evaluate start expression
-    if isinstance(warrior.start, str):
-        warrior.start = eval(warrior.start, environment, labels)
-    if isinstance(warrior.start, int):
-        warrior.start = Point2D(warrior.start, 0)
-
-    # second pass - evaluate labels and expressions
-    for pos, instruction in warrior.instructions.items():
-        # create a dictionary of relative labels addresses to be used as a local
-        # eval environment
-        relative_labels = dict((name, Point2D(address.x - pos.x, address.y - pos.y)) 
-                             for name, address in labels.items())
-
-        # evaluate instruction fields using global environment and labels
-        if isinstance(instruction.a_number, str):
-            instruction.a_number = eval(instruction.a_number, environment, relative_labels)
-        if isinstance(instruction.b_number, str):
-            instruction.b_number = eval(instruction.b_number, environment, relative_labels)
-
-    warrior.labels = labels
-    warrior.environment = environment
-
-    return warrior
+    """Parse Redcode from a line iterator returning a Warrior object."""
+    from parser import parse as parse_warrior
+    return parse_warrior(input, definitions)
 

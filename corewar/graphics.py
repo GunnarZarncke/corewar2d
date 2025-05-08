@@ -98,6 +98,8 @@ class PygameMARS(MARS):
         self.core_surface = pygame.Surface(self.size)
         self.recent_events = pygame.Surface(self.size)
         self.recent_events.set_colorkey(DEFAULT_BG_COLOR)
+        self.energy_surface = pygame.Surface(self.size)
+        self.energy_surface.set_colorkey(DEFAULT_BG_COLOR)
 
     def reset(self, clear_instruction=DEFAULT_INITIAL_INSTRUCTION):
         self.core.clear(clear_instruction)
@@ -108,19 +110,48 @@ class PygameMARS(MARS):
                                    ((n % INSTRUCTIONS_PER_LINE) * INSTRUCTION_SIZE_X,
                                     (n / INSTRUCTIONS_PER_LINE) * INSTRUCTION_SIZE_Y))
         self.load_warriors()
+        self.update_energy_display()
 
     def load_warriors(self):
         super(PygameMARS, self).load_warriors()
         for instruction in self:
             instruction.fg_color = DEFAULT_FG_COLOR
             instruction.bg_color = DEFAULT_BG_COLOR
+        self.update_energy_display()
 
     def step(self):
         self.recent_events.fill(DEFAULT_BG_COLOR)
         super(PygameMARS, self).step()
+        if self.energy_mode:
+            self.update_energy_display()
+
+    def update_energy_display(self):
+        """Update the energy visualization surface."""
+        self.energy_surface.fill(DEFAULT_BG_COLOR)
+        for n, instruction in enumerate(self):
+            if self.energy_mode and instruction.energy > 0:
+                # Calculate energy bar height (0-100%)
+                energy_height = int((instruction.energy / 1000.0) * INSTRUCTION_SIZE_Y)
+                if energy_height > 0:
+                    # Draw energy bar
+                    energy_rect = pygame.Rect(
+                        (n % INSTRUCTIONS_PER_LINE) * INSTRUCTION_SIZE_X,
+                        (n / INSTRUCTIONS_PER_LINE) * INSTRUCTION_SIZE_Y + (INSTRUCTION_SIZE_Y - energy_height),
+                        INSTRUCTION_SIZE_X,
+                        energy_height
+                    )
+                    # Use a gradient from green to red based on energy level
+                    energy_color = (
+                        int(255 * (1 - instruction.energy / 1000.0)),  # Red component
+                        int(255 * (instruction.energy / 1000.0)),      # Green component
+                        0                                             # Blue component
+                    )
+                    pygame.draw.rect(self.energy_surface, energy_color, energy_rect)
 
     def blit_into(self, surface, dest):
         surface.blit(self.core_surface, dest)
+        if self.energy_mode:
+            surface.blit(self.energy_surface, dest)
         surface.blit(self.recent_events, dest)
 
     def core_event(self, warrior, address, event_type):
@@ -190,6 +221,8 @@ if __name__ == "__main__":
                         default=100, help='Max warrior length')
     parser.add_argument('--distance', '-d', metavar='MINDISTANCE', type=int, nargs='?',
                         default=100, help='Minimum warrior distance')
+    parser.add_argument('--energy', '-e', metavar='TOTAL_ENERGY', type=int, nargs='?',
+                        const=100000, default=0, help='Total energy for simulation (default: 100000 when flag is present, 0 when flag is not present)')
     parser.add_argument('warriors', metavar='WARRIOR', type=argparse.FileType('r'), nargs='+',
                         help='Warrior redcode filename')
 
@@ -217,7 +250,8 @@ if __name__ == "__main__":
 
     # create MARS
     simulation = PygameMARS(minimum_separation = args.distance,
-                            max_processes = args.processes)
+                            max_processes = args.processes,
+                            total_energy = args.energy)
     simulation.warriors = warriors
 
     # initialize pygame engine
@@ -298,9 +332,11 @@ if __name__ == "__main__":
             to_remove = []
             for warrior in active_warriors:
                 if not warrior.task_queue:
-                    print("%s (%s) losses after %d cycles." % (warrior.name,
+                    energy_info = " (energy mode)" if simulation.energy_mode else ""
+                    print("%s (%s) losses after %d cycles%s." % (warrior.name,
                                                                warrior.author,
-                                                               cycle))
+                                                               cycle,
+                                                               energy_info))
                     warrior.losses += 1
                     to_remove.append(warrior)
 
@@ -310,9 +346,11 @@ if __name__ == "__main__":
             # if there's only one left, or are all dead, then stop simulation
             if len(active_warriors) <= active_warrior_to_stop:
                 for warrior in active_warriors:
-                    print("%s (%s) wins after %d cycles." % (warrior.name,
+                    energy_info = " (energy mode)" if simulation.energy_mode else ""
+                    print("%s (%s) wins after %d cycles%s." % (warrior.name,
                                                              warrior.author,
-                                                             cycle))
+                                                             cycle,
+                                                             energy_info))
                     warrior.wins += 1
                 break
 
@@ -343,18 +381,22 @@ if __name__ == "__main__":
             if next_round:
                 for warrior in active_warriors:
                     if warrior.task_queue:
-                        print("%s (%s) ties after %d cycles." % (warrior.name,
+                        energy_info = " (energy mode)" if simulation.energy_mode else ""
+                        print("%s (%s) ties after %d cycles%s." % (warrior.name,
                                                                  warrior.author,
-                                                                 cycle))
+                                                                 cycle,
+                                                                 energy_info))
                         warrior.ties += 1
                 break
         else:
             # running until max cycles: tie
             for warrior in active_warriors:
                 if warrior.task_queue:
-                    print("%s (%s) ties after %d cycles." % (warrior.name,
+                    energy_info = " (energy mode)" if simulation.energy_mode else ""
+                    print("%s (%s) ties after %d cycles%s." % (warrior.name,
                                                              warrior.author,
-                                                             cycle))
+                                                             cycle,
+                                                             energy_info))
                     warrior.ties += 1
 
         if stop_rounds:

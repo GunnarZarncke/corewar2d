@@ -8,7 +8,8 @@ from random import randint
 
 from core import Core, DEFAULT_INITIAL_INSTRUCTION
 from redcode import *
-from redcode import Point2D, STEP_NORMAL, STEP_VERTICAL, STEP_BACKWARD, STEP_VERTICAL_BACKWARD
+from redcode import STEP_NORMAL, STEP_VERTICAL, STEP_BACKWARD, STEP_VERTICAL_BACKWARD
+from redcode import Point2D
 
 __all__ = ['MARS', 'EVENT_EXECUTED', 'EVENT_I_WRITE', 'EVENT_I_READ',
            'EVENT_A_DEC', 'EVENT_A_INC', 'EVENT_B_DEC', 'EVENT_B_INC',
@@ -35,13 +36,14 @@ class MARS(object):
     """
 
     def __init__(self, core=None, warriors=None, minimum_separation=100,
-                 randomize=True, max_processes=None):
+                 randomize=True, max_processes=None, total_energy=100000):
         self.core = core if core else Core()
         self.minimum_separation = minimum_separation
         self.max_processes = max_processes if max_processes else len(self.core)
         self.warriors = warriors if warriors else []
+        self.energy_mode = total_energy > 0
         if self.warriors:
-            self.load_warriors(randomize)
+            self.load_warriors(randomize, total_energy)
 
     def point_to_index(self, point):
         """Convert a Point2D to a memory index, handling wrapping around the core size."""
@@ -77,7 +79,7 @@ class MARS(object):
         self.core.clear(clear_instruction)
         self.load_warriors()
 
-    def load_warriors(self, randomize=True):
+    def load_warriors(self, randomize=True, total_energy = 0):
         "Loads its warriors to the memory with starting task queues"
 
         # the space between warriors - equally spaced in the core
@@ -115,6 +117,9 @@ class MARS(object):
             # Add first task
             warrior.task_queue = [start_pos]
 
+            # Calculate energy per instruction for this warrior
+            warrior_energy = total_energy // len(warrior.instructions) if self.energy_mode else 1000
+
             # Copy warrior's instructions to the core
             for pos, instruction in warrior.instructions.items():
                 # Calculate absolute position in core
@@ -122,8 +127,13 @@ class MARS(object):
                 abs_y = (warrior_position.y + pos.y) % self.core.height
                 abs_pos = Point2D(abs_x, abs_y)
                 
+                # Create a copy of the instruction with warrior's energy
+                instruction_copy = copy(instruction)
+                if self.energy_mode:
+                    instruction_copy.energy = warrior_energy
+                
                 # Store instruction
-                self.set_instruction(abs_pos, copy(instruction))
+                self.set_instruction(abs_pos, instruction_copy)
                 self.core_event(warrior, abs_pos, EVENT_I_WRITE)
 
     def enqueue(self, warrior, point):
@@ -264,6 +274,10 @@ class MARS(object):
         target_instruction = self.get_instruction(target_point)
         rpa_point = Point2D(pc.x + rpa.x, pc.y + rpa.y)
 
+        # Move energy between instructions if in energy mode
+        if self.energy_mode:
+            target_instruction.move_energy(ira)
+
         if ir.modifier == M_A:
             target_instruction.a_number = ira.a_number
             self.core_event(warrior, rpa_point, EVENT_A_READ)
@@ -381,8 +395,15 @@ class MARS(object):
                 if not isinstance(pc, Point2D):
                     raise ValueError("Invalid process counter: %s" % pc)
 
+                # Get the current instruction
+                ir = self.get_instruction(pc)
+
+                # Check energy if in energy mode
+                if self.energy_mode and not ir.has_energy():
+                    continue  # Skip execution if no energy
+
                 # copy the current instruction to the instruction register
-                ir = copy(self.get_instruction(pc))
+                ir = copy(ir)
 
                 # evaluate the A-operand
                 rpa, wpa, pip_a = self.evaluate_operand(pc, ir.a_number, ir.a_mode, ir.stepping, warrior)
@@ -392,7 +413,12 @@ class MARS(object):
                 # evaluate the B-operand
                 rpb, wpb, pip_b = self.evaluate_operand(pc, ir.b_number, ir.b_mode, ir.stepping, warrior)
                 irb = copy(self.get_instruction(Point2D(pc.x + rpb.x, pc.y + rpb.y)))
-                self.handle_post_increment(pip_b, ir.b_mode, ir.stepping,warrior)
+                self.handle_post_increment(pip_b, ir.b_mode, ir.stepping, warrior)
+
+                # Consume energy if in energy mode
+                if self.energy_mode:
+                    if not ir.consume_energy():
+                        continue  # Skip execution if not enough energy
 
                 self.core_event(warrior, pc, EVENT_EXECUTED)
                 self.execute_instruction(warrior, pc, ir, ira, irb, rpa, rpb, wpb)
@@ -519,6 +545,8 @@ if __name__ == "__main__":
                         default=100, help='Max warrior length')
     parser.add_argument('--distance', '-d', metavar='MINDISTANCE', type=int, nargs='?',
                         default=100, help='Minimum warrior distance')
+    parser.add_argument('--energy', '-e', metavar='TOTAL_ENERGY', type=int, nargs='?',
+                        const=100000, default=0, help='Total energy for simulation (default: 100000 when flag is present, 0 when flag is not present)')
     parser.add_argument('warriors', metavar='WARRIOR', type=str, nargs='+',
                         help='Warrior redcode filename')
 
@@ -541,11 +569,11 @@ if __name__ == "__main__":
 
     # for each round
     for i in range(args.rounds):
-
         # create new simulation
         simulation = MARS(warriors=warriors,
                           minimum_separation = args.distance,
-                          max_processes = args.processes)
+                          max_processes = args.processes,
+                          total_energy = args.energy)
 
         active_warrior_to_stop = 1 if len(warriors) >= 2 else 0
 
