@@ -285,4 +285,82 @@ MOV.I.W #0, 0    ; PC moves to (0,-1)
 - Add program loading
 - Add multiple warrior support
 - Add visualization
-- Add performance profiling 
+- Add performance profiling
+
+## Core War 2D
+
+This is a 2D version of Core War, a programming game where programs (warriors) compete in a virtual computer's memory.
+
+## Architecture
+
+The project is organized into several key components:
+
+### Core Components
+
+- `core.py`: Implements the core memory as a 2D grid
+- `redcode.py`: Defines the Redcode instruction set and instruction representation
+- `mars.py`: The Memory Array Redcode Simulator that executes programs
+- `mutator.py`: Provides mutation functionality for genetic algorithms
+
+### Energy System
+
+The simulator supports an energy-based system where:
+- Each instruction can have an energy value
+- Energy is consumed when instructions are executed
+- Energy can be transferred between instructions during MOV operations
+- Energy is preserved during mutation operations
+- When energy is exhausted, instructions cannot be executed
+
+### Testing
+
+- `tests/`: Contains test files for each component
+- Tests are written using pytest
+- Each component should have corresponding test files
+
+## Development Guidelines
+
+1. Code Style
+   - Follow PEP 8
+   - Use type hints
+   - Document all functions and classes
+
+2. Testing
+   - Write tests for new features
+   - Maintain test coverage
+   - Use pytest fixtures for common setup
+
+3. Error Handling
+   - Validate all input
+   - Handle errors gracefully
+   - Do not use nil values to represent invalid data
+
+4. Energy Mode
+   - When implementing new features, consider energy mode implications
+   - Energy should be preserved during non-execution operations
+   - Energy transfer should be handled explicitly in MOV operations
+   - Energy exhaustion should be checked before instruction execution
+
+## Building and Running
+
+1. Install dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+2. Run tests:
+   ```bash
+   pytest
+   ```
+
+3. Run the simulator:
+   ```bash
+   python -m corewar.mars warrior1.red warrior2.red
+   ```
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Run tests
+5. Submit a pull request 
